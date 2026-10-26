@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.benny.nfctools.LocalStoreTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-26T09:42:23" hostname="ALILEXIWALKER" time="3.896">
+  <properties/>
+  <testcase name="corruptedDraftDoesNotCrashStartup" classname="com.benny.nfctools.LocalStoreTest" time="3.72"/>
+  <testcase name="historyRoundTripPreservesNullCapabilities" classname="com.benny.nfctools.LocalStoreTest" time="0.08"/>
+  <testcase name="draftAndImportedBackupPersistAcrossStoreInstances" classname="com.benny.nfctools.LocalStoreTest" time="0.096"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

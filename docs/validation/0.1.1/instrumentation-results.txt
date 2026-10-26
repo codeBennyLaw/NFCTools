@@ -1,0 +1,9 @@
+
+com.benny.nfctools.AppFlowTest:....
+com.benny.nfctools.FileTransferDeviceTest:..
+com.benny.nfctools.LocalStoreDeviceTest:..
+com.benny.nfctools.SimplifiedFlowTest:....
+
+Time: 25.419
+
+OK (12 tests)
