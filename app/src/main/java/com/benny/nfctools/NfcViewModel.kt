@@ -52,6 +52,7 @@ class NfcViewModel internal constructor(application: Application, private val en
                     notify("历史记录读取失败，原文件已保留；新扫描仍可使用")
                 }
             }
+            refreshSavedCards()
         }
     }
     fun notify(message: String) { notices.trySend(message) }
@@ -124,7 +125,7 @@ class NfcViewModel internal constructor(application: Application, private val en
                 // content received via a share/import while NFC I/O was running.
                 val clearWrittenDraft = singleWrite && state.value.draft == started.draft && state.value.importedMessage == started.importedMessage
                 val clearWrittenEntry = singleWrite && state.value.activeEntry == started.activeEntry
-                mutable.update { it.copy(current = snapshot,
+                mutable.update { it.copy(current = snapshot, currentSource = ReadSource.NFC, currentCardName = null,
                     draft = if (clearWrittenDraft) emptyList() else it.draft,
                     importedMessage = if (clearWrittenDraft) null else it.importedMessage,
                     activeEntry = if (clearWrittenEntry) DraftRecord(kind = it.composerKind) else it.activeEntry,
@@ -135,6 +136,7 @@ class NfcViewModel internal constructor(application: Application, private val en
                 if (clearWrittenEntry) store.saveQuickEntry(state.value.activeEntry)
                 notify(if (operation == null) "已读取标签" else if (clearWrittenDraft && clearWrittenEntry) "写入完成，已清空待写入内容" else if (operation.kind == OperationKind.FORMAT) "格式化完成，请移开后重新扫描" else "${operation.kind.label}完成")
                 appendHistory(snapshot)
+                refreshSavedCards()
             } catch (e: Exception) {
                 val error = when (e) {
                     is TagLostException -> "卡片已移开，请贴近手机重新扫描；若刚执行写入，请检查内容"
@@ -162,7 +164,26 @@ class NfcViewModel internal constructor(application: Application, private val en
             }
         }
     }
-    fun openHistory(snapshot: TagSnapshot) { mutable.update { it.copy(current = snapshot, destination = Destination.READ, pending = null) } }
+    fun openHistory(snapshot: TagSnapshot) { if (!state.value.busy) mutable.update { it.copy(current = snapshot, currentSource = ReadSource.HISTORY, currentCardName = null, destination = Destination.READ, pending = null, error = null) } }
+    fun openCard(id: String) {
+        if (state.value.busy) return
+        val card = state.value.cards.firstOrNull { it.id == id } ?: return
+        val latest = CardSnapshots.latest(card.tag, state.value.history, state.value.current)
+        mutable.update { it.copy(current = latest, currentSource = ReadSource.CARD, currentCardName = card.name, destination = Destination.READ, pending = null, error = null) }
+    }
+
+    private suspend fun refreshSavedCards() = cardsMutex.withLock {
+        val previous = state.value.cards
+        val cards = previous.map { it.copy(tag = CardSnapshots.latest(it.tag, state.value.history, state.value.current)) }
+        if (cards == previous) return@withLock
+        try {
+            withContext(Dispatchers.IO) { store.saveCards(cards) }
+            mutable.update { state ->
+                val opened = if (state.currentSource == ReadSource.CARD) cards.firstOrNull { card -> state.current?.let { CardSnapshots.sameCard(card.tag, it) } == true } else null
+                state.copy(cards = cards, current = opened?.tag ?: state.current, currentCardName = opened?.name ?: state.currentCardName)
+            }
+        } catch (_: Exception) { notify("最新内容已读取，但卡包更新失败，请重新保存到卡包") }
+    }
     fun reuse(snapshot: TagSnapshot) {
         val message = snapshot.messageBase64 ?: return
         mutable.update { it.copy(importedMessage = message, draft = emptyList(), destination = Destination.WRITE, pending = null) }
@@ -194,15 +215,16 @@ class NfcViewModel internal constructor(application: Application, private val en
         if (tag.sample) { notify("示例标签不会存入卡包，请先读取真实卡片"); return }
         viewModelScope.launch {
             cardsMutex.withLock {
-                val existing = state.value.cards.firstOrNull { it.tag.uid == tag.uid }
-                val card = SavedCard(existing?.id ?: java.util.UUID.randomUUID().toString(), name.ifBlank { existing?.name ?: "卡片 ${tag.uid.takeLast(8)}" }, existing?.category ?: category, tag)
+                val existing = state.value.cards.firstOrNull { it.tag.uid == tag.uid || CardSnapshots.sameCard(it.tag, tag) }
+                val latest = CardSnapshots.latest(existing?.tag ?: tag, state.value.history + tag, state.value.current)
+                val card = SavedCard(existing?.id ?: java.util.UUID.randomUUID().toString(), name.ifBlank { existing?.name ?: "卡片 ${tag.uid.takeLast(8)}" }, existing?.category ?: category, latest)
                 val cards = listOf(card) + state.value.cards.filterNot { it.id == card.id }
                 try { withContext(Dispatchers.IO) { store.saveCards(cards) }; mutable.update { it.copy(cards = cards) }; notify("已保存到卡包，可在卡包中改名和分类") }
                 catch (e: Exception) { notify("保存失败：${e.message}") }
             }
         }
     }
-    fun updateCard(card: SavedCard) = mutateCards { it.map { old -> if (old.id == card.id) card else old } }
+    fun updateCard(card: SavedCard) = mutateCards { it.map { old -> if (old.id == card.id) old.copy(name = card.name, category = card.category) else old } }
     fun deleteCard(id: String) = mutateCards { it.filterNot { card -> card.id == id } }
     private fun mutateCards(transform: (List<SavedCard>) -> List<SavedCard>) {
         viewModelScope.launch { cardsMutex.withLock {
@@ -219,13 +241,13 @@ class NfcViewModel internal constructor(application: Application, private val en
                     MemoryDumpCodec.parse(bytes, name)
                 }
                 val tag = TagSnapshot("文件 ${java.util.UUID.randomUUID().toString().take(8)}", emptyList(), dump.format, null, null, false, false, mapOf("来源文件" to name), null, action = "导入 Dump", memory = dump)
-                mutable.update { it.copy(current = tag, destination = Destination.READ) }
+                mutable.update { it.copy(current = tag, currentSource = ReadSource.FILE, currentCardName = null, destination = Destination.READ) }
             } catch (e: Exception) { notify("导入 Dump 失败：${e.message}") }
         }
     }
     fun showSample() {
         val message = NdefCodec.encode(listOf(DraftRecord(value = "你好，NFC。\n让每一次轻触，都有新的可能。"), DraftRecord(kind = RecordKind.URI, value = "https://developer.android.com")))
-        mutable.update { it.copy(destination = Destination.READ, current = TagSnapshot(
+        mutable.update { it.copy(destination = Destination.READ, currentSource = ReadSource.NFC, currentCardName = null, current = TagSnapshot(
             "04 A2 8B 6C 71 2D 80", listOf("NfcA", "MifareUltralight", "Ndef"), "NFC Forum Type 2", 492,
             true, true, false, mapOf("ATQA" to "44 00", "SAK" to "00", "数据来源" to "界面演示，非真实读卡"),
             NdefCodec.base64(message.toByteArray()), sample = true)) }

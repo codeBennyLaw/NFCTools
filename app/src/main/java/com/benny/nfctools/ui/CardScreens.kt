@@ -45,19 +45,20 @@ fun CardsScreen(state: AppState, vm: NfcViewModel, onCompare: () -> Unit) {
         }
         if (cards.isEmpty()) item { EmptyState(Icons.Outlined.Wallet, if (state.cards.isEmpty()) "把常用卡片收进这里" else "没有匹配的卡片", "读卡后点“保存到卡包”，可以改名、分类和比较。") }
         items(cards, key = { it.id }) { card ->
-            Surface(onClick = { vm.openHistory(card.tag) }, shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
+            Surface(onClick = { vm.openCard(card.id) }, enabled = !state.busy, shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     IconTile(if (card.category == CardCategory.ACCESS) Icons.Outlined.DoorFront else Icons.Outlined.CreditCard)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(card.name, fontWeight = FontWeight.SemiBold)
                         Text("${card.category.label} · ${card.tag.type}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(card.tag.uid, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                        Text(remember(card.tag.messageBase64) { NdefCodec.summary(card.tag.messageBase64) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                     }
                     IconButton(onClick = { managingId = card.id }) { Icon(Icons.Outlined.MoreVert, "管理${card.name}") }
                 }
             }
         }
-        item { Text("卡包保存卡片信息与备份。门禁模拟需由系统钱包和门禁系统支持。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        item { Text("点击卡片查看本机最新记录；读写成功后自动更新已收藏卡片。门禁模拟需系统钱包支持。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
     state.cards.firstOrNull { it.id == managingId }?.let { card ->
         CardManageDialog(card, onDismiss = { managingId = null }, onSave = { vm.updateCard(it); managingId = null }, onDelete = { vm.deleteCard(card.id); managingId = null })

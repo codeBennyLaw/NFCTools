@@ -2,7 +2,7 @@
 
 Native Android utility, Kotlin + Jetpack Compose + Material 3. The ui-ux-pro-max
 search matched Minimalism & Swiss Style and the mobile utility palette. The
-returned landing-page pattern does not fit a native utility: use four bottom
+returned landing-page pattern does not fit a native utility: use five bottom
 destinations (读取 / 写入 / 卡包 / 工具 / 记录). Version 0.1.0 replaces the large
 scan illustration with a compact status panel so common actions fit on screen.
 
@@ -20,4 +20,7 @@ scan illustration with a compact status panel so common actions fit on screen.
   pickers and clipboard recognition prevent redundant typing. Unsaved input is
   retained across tabs and app restarts. Hide bottom navigation when IME is open.
 - Always show actual hardware state. Sample cards are explicitly labelled.
+- Saved cards open the latest local contents, with a visible source and record
+  time. Show content and per-record actions before technical metadata. A saved
+  snapshot is not presented as a new physical scan; do not run actions on open.
 - NFC I/O and bounded file reads run off the main thread. No network permission.

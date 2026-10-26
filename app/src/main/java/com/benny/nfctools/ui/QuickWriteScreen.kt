@@ -85,6 +85,7 @@ fun QuickWriteScreen(state: AppState, vm: NfcViewModel, onFile: () -> Unit, onCo
             }
             if (state.draft.isNotEmpty() || state.importedMessage != null) item {
                 SectionTitle("待写入 · ${bytes?.size ?: 0} B", "清空") { clear = true }
+                Text("可添加多条内容后一次写入；手机系统不会保证自动执行全部操作。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             items(state.draft, key = { it.id }) { record ->
                 Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface) {

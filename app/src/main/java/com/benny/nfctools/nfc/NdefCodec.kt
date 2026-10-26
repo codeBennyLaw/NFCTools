@@ -103,6 +103,13 @@ object NdefCodec {
         return NdefRecord.createMime("application/vnd.wfa.wsc", payload)
     }
 
+    fun summary(encoded: String?): String = runCatching {
+        val message = message(encoded) ?: return "暂无 NDEF 内容"
+        if (message.records.all { it.tnf == NdefRecord.TNF_EMPTY }) return "内容已清空"
+        val types = decode(message).map { it.title }.distinct().take(3).joinToString(" · ")
+        "$types · ${message.records.size} 条"
+    }.getOrDefault("NDEF 内容无法解析")
+
     fun decode(message: NdefMessage?): List<DecodedRecord> = message?.records?.map { r ->
         var title = "原始数据"
         var content = r.payload.hex()

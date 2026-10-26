@@ -35,12 +35,20 @@ private fun date(time: Long) = SimpleDateFormat("MM-dd HH:mm:ss", Locale.CHINA).
 @Composable
 fun ReadScreen(state: AppState, vm: NfcViewModel, openSettings: () -> Unit, onQuick: (RecordKind, String?) -> Unit, onExportPayload: (ByteArray, String) -> Unit, onExport: (TagSnapshot, Boolean) -> Unit) {
     LazyColumn(contentPadding = PagePadding, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        item { ReaderStatus(state, openSettings) }
+        if (state.current == null || state.currentSource == ReadSource.NFC) item { ReaderStatus(state, openSettings) }
         if (state.current != null) {
             item {
-                SectionTitle(if (state.current.sample) "示例标签 · 界面演示" else "最近读取的标签")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionTitle(if (state.current.sample) "示例标签 · 界面演示" else when (state.currentSource) {
+                        ReadSource.CARD -> "卡包 · ${state.currentCardName.orEmpty()}"
+                        ReadSource.HISTORY -> "历史记录"
+                        ReadSource.FILE -> "导入的内存文件"
+                        ReadSource.NFC -> "最近读取的标签"
+                    })
+                    if (state.currentSource == ReadSource.CARD) Text("本机最新记录 · ${date(state.current.timestamp)}，贴卡可更新", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            item { TagDetails(state.current, vm, onExport, onExportPayload, !state.busy) }
+            item { TagDetails(state.current, vm, onExport, onExportPayload, !state.busy, state.currentSource == ReadSource.CARD) }
         } else {
             item {
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -84,7 +92,7 @@ fun ReadScreen(state: AppState, vm: NfcViewModel, openSettings: () -> Unit, onQu
 }
 
 @Composable
-private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapshot, Boolean) -> Unit, onExportPayload: (ByteArray, String) -> Unit, enabled: Boolean) {
+private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapshot, Boolean) -> Unit, onExportPayload: (ByteArray, String) -> Unit, enabled: Boolean, contentFirst: Boolean) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val message = remember(tag.messageBase64) { runCatching { NdefCodec.message(tag.messageBase64) }.getOrNull() }
@@ -101,31 +109,10 @@ private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapsho
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         tag.details["NDEF 读取"]?.let { InfoNote(it) }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilledTonalButton(onClick = { vm.saveCard(tag) }, enabled = enabled && !tag.sample, modifier = Modifier.weight(1f)) { Text("保存到卡包", fontSize = 13.sp) }
-            OutlinedButton(onClick = { vm.copyToNext(tag) }, enabled = enabled && tag.messageBase64 != null, modifier = Modifier.weight(1f)) { Text("复制到新卡", fontSize = 13.sp) }
-        }
-        if (tag.messageBase64 != null) OutlinedButton(onClick = { vm.editContents(tag) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Outlined.EditNote, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("编辑读到的内容")
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("UID / 序列号", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    SelectionContainer { Text(tag.uid, fontFamily = FontFamily.Monospace, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
-                }
-                IconButton(onClick = { clipboard.setText(AnnotatedString(tag.uid)); vm.notify("UID 已复制") }) { Icon(Icons.Outlined.ContentCopy, "复制 UID", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp)) }
-            }
-            DetailLine("技术协议", tag.technologies.joinToString(" · "))
-            DetailLine("写入状态", when (tag.writable) { true -> "可写入"; false -> "只读"; null -> if (tag.formatable) "可格式化为 NDEF" else "不支持 NDEF 写入" })
-            if (tag.writable == true) DetailLine("设为只读", if (tag.canLock) "支持（永久生效）" else "不支持")
-            if (tag.capacity != null) {
-                DetailLine("NDEF 容量", "$size / ${tag.capacity} B")
-                LinearProgressIndicator(progress = { if (tag.capacity > 0) (size.toFloat() / tag.capacity).coerceIn(0f, 1f) else 0f }, modifier = Modifier.fillMaxWidth().height(5.dp), color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.primaryContainer)
-            }
-        }
+        if (!contentFirst) TagActions(tag, vm, enabled)
         if (records.isNotEmpty()) {
-            SectionTitle("NDEF 内容 · ${records.size} 条", if (raw) "收起 HEX" else "查看 HEX") { raw = !raw }
+            SectionTitle("标签内容 · ${records.size} 条", if (raw) "收起 HEX" else "查看 HEX") { raw = !raw }
+            if (records.size > 1) Text("多条内容可分别查看或打开；写入多条记录不会让系统自动执行全部操作。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             records.forEachIndexed { index, record ->
                 Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background, RoundedCornerShape(16.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("${index + 1}. ${record.title}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -142,7 +129,7 @@ private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapsho
                                 else android.content.Intent(android.content.Intent.ACTION_VIEW, original.toUri())
                                 context.startActivity(intent)
                             }.onFailure { vm.notify(it.message ?: "没有可处理此内容的应用") }
-                        }) { Text(if (record.title == "打开应用") "打开 App" else "打开内容") }
+                        }, enabled = enabled) { Text(if (record.title == "打开应用") "打开 App" else "打开内容") }
                     }
                     if (original.tnf == android.nfc.NdefRecord.TNF_MIME_MEDIA) TextButton(onClick = {
                         val mime = original.toMimeType().orEmpty()
@@ -152,6 +139,24 @@ private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapsho
                 }
             }
         } else InfoNote(if (tag.formatable) "尚未发现 NDEF 内容，可在工具页将此标签格式化。" else "此卡没有可读取的 NDEF 内容。已显示可获取的公开信息；加密区需专用协议和授权。")
+        if (contentFirst) TagActions(tag, vm, enabled)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("UID / 序列号", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SelectionContainer { Text(tag.uid, fontFamily = FontFamily.Monospace, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
+                }
+                IconButton(onClick = { clipboard.setText(AnnotatedString(tag.uid)); vm.notify("UID 已复制") }) { Icon(Icons.Outlined.ContentCopy, "复制 UID", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp)) }
+            }
+            DetailLine("技术协议", tag.technologies.joinToString(" · "))
+            DetailLine("写入状态", when (tag.writable) { true -> "可写入"; false -> "只读"; null -> if (tag.formatable) "可格式化为 NDEF" else "不支持 NDEF 写入" })
+            if (tag.writable == true) DetailLine("设为只读", if (tag.canLock) "支持（永久生效）" else "不支持")
+            if (tag.capacity != null) {
+                DetailLine("NDEF 容量", "$size / ${tag.capacity} B")
+                LinearProgressIndicator(progress = { if (tag.capacity > 0) (size.toFloat() / tag.capacity).coerceIn(0f, 1f) else 0f }, modifier = Modifier.fillMaxWidth().height(5.dp), color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.primaryContainer)
+            }
+        }
         var expanded by rememberSaveable(tag.id) { mutableStateOf(false) }
         TextButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) { Text(if (expanded) "收起技术信息" else "展开技术信息"); Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null) }
         if (expanded) tag.details.forEach { (label, value) -> DetailLine(label, value) }
@@ -170,6 +175,17 @@ private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapsho
             OutlinedButton(onClick = { onExport(tag, false) }, enabled = enabled, modifier = Modifier.weight(1f)) { Text("导出报告", fontSize = 13.sp) }
             OutlinedButton(onClick = { onExport(tag, true) }, enabled = enabled && tag.messageBase64 != null, modifier = Modifier.weight(1f)) { Text("备份 NDEF", fontSize = 13.sp) }
         }
+    }
+}
+
+@Composable
+private fun TagActions(tag: TagSnapshot, vm: NfcViewModel, enabled: Boolean) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilledTonalButton(onClick = { vm.saveCard(tag) }, enabled = enabled && !tag.sample, modifier = Modifier.weight(1f)) { Text("保存到卡包", fontSize = 13.sp) }
+        OutlinedButton(onClick = { vm.copyToNext(tag) }, enabled = enabled && tag.messageBase64 != null, modifier = Modifier.weight(1f)) { Text("复制到新卡", fontSize = 13.sp) }
+    }
+    if (tag.messageBase64 != null) OutlinedButton(onClick = { vm.editContents(tag) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Outlined.EditNote, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("编辑读到的内容")
     }
 }
 

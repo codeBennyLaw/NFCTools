@@ -1,4 +1,32 @@
-# 0.1.1 验证记录
+# 0.2.0 验证记录
+
+日期：2026-10-27。包名 `com.benny.nfctools`，versionCode 20。
+本地安装包：`dist/NFCTools-release-v-0-2-0.apk` 和 `dist/NFCTools-debug-v-0-2-0.apk`。本次通过功能分支提交 PR，未发布 0.2.0 Release。
+
+| 检查 | 结果 |
+| --- | --- |
+| 构建 | Debug、AndroidTest、Release 构建通过 |
+| 单元测试 | 43 项通过，其中新增 8 项覆盖同卡判断、最新记录选择及内容摘要 |
+| Android 设备测试 | Android 16 / API 36 模拟器，16 项全部通过，其中新增 4 项卡包流程测试 |
+| Lint | 0 错误，3 条现有依赖版本更新建议 |
+| 安装包 | 0.2.0 / 20，签名验证与 16 KB ZIP 对齐通过；Release 不可调试，沿用原有证书 |
+
+新增验证覆盖：
+
+- 同一卡号的格式差异不影响内容匹配；其他卡片、示例和缺失 UID 不参与自动匹配。
+- 成功写入后同步更新已有卡包内容，保留名称、分类和 ID；点击卡片进入读取详情，同时显示应用与链接等多条记录。
+- 清空历史后，卡包仍保存最新内容；旧版卡包可以从较新的本机历史补齐。
+- 使用旧管理弹窗的卡片对象改名，不会将内容回退到旧版本。
+- 失败写入保留旧卡包与待写入草稿；部分 NDEF 读取失败不覆盖最近已知内容。
+- 新的成功读取与擦除会更新卡包；摘要区分空内容、无内容与不可解析内容，列表摘要不包含 Wi-Fi 密码等具体值。
+
+新增设备测试通过替代 NFC 执行器和无射频服务的 Tag 测试数据验证实际 ViewModel、Compose 导航和 Android 本地存储。**没有使用 NFC 实卡，也没有验证荣耀 MagicOS 11 / Android 17 的系统触发行为。**
+
+已查看模拟器真实截图（其中卡片及写入内容为测试数据）：[卡包列表](screenshots/0.2.0/cards.png)、[卡包详情](screenshots/0.2.0/card-detail.png)。本机详情优先显示内容，不显示实体扫描状态区；时间与本机来源有明确说明，打开卡片不会自动执行记录中的应用或链接。
+
+测试输出见 [validation/0.2.0/](validation/0.2.0/)。多条 NDEF 数据的写入和展示不等于自动执行任务链，依据：[Android NFC 分发](https://developer.android.com/develop/connectivity/nfc/nfc)、[应用记录处理](https://developer.android.com/reference/android/nfc/NdefRecord#createApplicationRecord(java.lang.String))。
+
+# 0.1.1 历史验证记录
 
 日期：2026-10-27。包名 `com.benny.nfctools`，versionCode 11。
 安装包：`dist/NFCTools-debug-v-0-1-1.apk`。
