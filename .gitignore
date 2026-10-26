@@ -11,3 +11,13 @@ dist/
 *.jks
 *.keystore
 keystore.properties
+
+# Local work records and generated artifacts
+/AGENTS.md
+/CONTRIBUTING.md
+/design-system/
+/docs/VALIDATION.md
+/docs/validation/
+/docs/screenshots/
+*.apk
+*.log
