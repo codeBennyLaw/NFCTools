@@ -106,10 +106,6 @@ app/src/main/java/com/benny/nfctools/
   ui/                   四个页面、表单、设计组件、深浅色主题
 ```
 
-设计说明见 [design-system/nfc-tools/MASTER.md](design-system/nfc-tools/MASTER.md)。
-验证情况与真机检查步骤见 [docs/VALIDATION.md](docs/VALIDATION.md)。
 更新内容见 [docs/CHANGELOG.md](docs/CHANGELOG.md)。
-
-后续 commit、PR 与 Release 按 [CONTRIBUTING.md](CONTRIBUTING.md) 执行，参考用户指定的 WyuTimetable 仓库。
 
 实现依据：[Android NDEF API](https://developer.android.com/reference/android/nfc/tech/Ndef)、[前台 Reader Mode](https://developer.android.com/reference/android/nfc/NfcAdapter)、[NDEF 格式化接口](https://developer.android.com/reference/android/nfc/tech/NdefFormatable)。
