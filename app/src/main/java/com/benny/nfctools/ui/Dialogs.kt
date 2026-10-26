@@ -32,7 +32,7 @@ fun RecordEditor(record: DraftRecord, onDismiss: () -> Unit, onSave: (DraftRecor
         RecordKind.TEXT -> "文本内容"; RecordKind.URI -> "完整网址"; RecordKind.WIFI -> "网络名称（SSID）";
         RecordKind.CONTACT -> "联系人姓名"; RecordKind.PHONE, RecordKind.SMS -> "电话号码";
         RecordKind.EMAIL -> "收件人邮箱"; RecordKind.GEO -> "纬度"; RecordKind.FILE -> "文件名称";
-        RecordKind.APPLICATION -> "应用包名"; RecordKind.CUSTOM_URI -> "应用链接 / URI"; RecordKind.HEX -> "十六进制数据"
+        RecordKind.APPLICATION -> "应用包名"; RecordKind.CUSTOM_URI -> "应用链接 / URI"; RecordKind.HEX -> "十六进制数据"; RecordKind.DELAY -> "等待秒数（1–600）"
     }
     val secondLabel = when (kind) { RecordKind.WIFI -> "密码（开放网络留空）"; RecordKind.CONTACT -> "电话号码（可选）"; RecordKind.EMAIL -> "邮件主题（可选）"; RecordKind.SMS -> "短信内容（可选）"; RecordKind.GEO -> "经度"; RecordKind.HEX -> "MIME 类型（默认 application/octet-stream）"; else -> null }
     val keyboard = when (kind) { RecordKind.PHONE, RecordKind.SMS -> KeyboardType.Phone; RecordKind.EMAIL -> KeyboardType.Email; RecordKind.URI -> KeyboardType.Uri; RecordKind.GEO -> KeyboardType.Text; else -> KeyboardType.Text }

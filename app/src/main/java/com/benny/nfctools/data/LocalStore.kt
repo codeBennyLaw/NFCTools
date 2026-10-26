@@ -30,13 +30,14 @@ class LocalStore(context: Context) {
                 o.optString("secondary"), o.optString("tertiary"), o.optString("mime", "application/octet-stream"), o.optString("base64"))
         }
     }.getOrDefault(emptyList())
-    fun saveDraft(records: List<DraftRecord>, imported: String?) {
+    fun saveDraft(records: List<DraftRecord>, imported: String?, sequence: Boolean = false) {
         val a = JSONArray().apply { records.forEach { d ->
             put(JSONObject().put("id", d.id).put("kind", d.kind.name).put("value", d.value)
                 .put("secondary", d.secondary).put("tertiary", d.tertiary).put("mime", d.mime).put("base64", d.base64))
         } }
-        prefs.edit { putString("draft", a.toString()); putString("imported", imported) }
+        prefs.edit { putString("draft", a.toString()); putString("imported", imported); putBoolean("sequence_mode", sequence) }
     }
+    fun sequenceMode(): Boolean = prefs.getBoolean("sequence_mode", false)
     fun imported(): String? = prefs.getString("imported", null)
     fun theme(): String = prefs.getString("theme", "system") ?: "system"
     fun saveTheme(theme: String) { prefs.edit { putString("theme", theme) } }

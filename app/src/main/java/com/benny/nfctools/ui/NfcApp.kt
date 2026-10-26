@@ -28,9 +28,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.benny.nfctools.NfcViewModel
 import com.benny.nfctools.data.*
 import com.benny.nfctools.nfc.NdefCodec
+import com.benny.nfctools.tasks.TaskDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -41,6 +45,18 @@ fun NfcApp(vm: NfcViewModel, openSettings: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val taskRun by vm.tasks.state.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(vm, lifecycleOwner, context) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            vm.tasks.resume()
+            try {
+                vm.tasks.requests.collect { request ->
+                    if (vm.tasks.accepts(request)) vm.tasks.dispatched(request, TaskDispatcher.dispatch(context, request.record))
+                }
+            } finally { vm.tasks.pause() }
+        }
+    }
     val scope = rememberCoroutineScope()
     var settings by rememberSaveable { mutableStateOf(false) }
     var editorKind by rememberSaveable { mutableStateOf<String?>(null) }
@@ -110,6 +126,7 @@ fun NfcApp(vm: NfcViewModel, openSettings: () -> Unit) {
     BackHandler(enabled = state.destination != Destination.READ && state.pending == null && !state.busy && !settings && editorKind == null && confirmation == null) { vm.navigate(Destination.READ) }
 
     NfcTheme(state.darkMode) {
+        taskRun?.let { TaskSheet(it, vm.tasks) }
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = { SnackbarHost(snackbar) },

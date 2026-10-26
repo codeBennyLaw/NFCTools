@@ -12,6 +12,7 @@ import com.benny.nfctools.nfc.NfcEngine
 import com.benny.nfctools.nfc.NfcOperations
 import com.benny.nfctools.nfc.QuickEntry
 import com.benny.nfctools.nfc.MemoryDumpCodec
+import com.benny.nfctools.tasks.TaskRunner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -30,7 +31,8 @@ class NfcViewModel internal constructor(application: Application, private val en
     private var foreground = true
     private var lastWrittenUid: String? = null
     private val initialEntry = store.quickEntry()
-    private val mutable = MutableStateFlow(AppState(draft = store.draft(), importedMessage = store.imported(), darkMode = store.theme(), activeEntry = initialEntry, composerKind = initialEntry.kind))
+    private val mutable = MutableStateFlow(AppState(draft = store.draft(), importedMessage = store.imported(), sequenceMode = store.sequenceMode(), darkMode = store.theme(), activeEntry = initialEntry, composerKind = initialEntry.kind))
+    val tasks = TaskRunner(viewModelScope)
     val state = mutable.asStateFlow()
     private val notices = Channel<String>(Channel.BUFFERED)
     val messages = notices.receiveAsFlow()
@@ -60,8 +62,8 @@ class NfcViewModel internal constructor(application: Application, private val en
     fun navigate(destination: Destination) { if (!state.value.busy) mutable.update { it.copy(destination = destination, pending = null) } }
     fun theme(mode: String) { store.saveTheme(mode); mutable.update { it.copy(darkMode = mode) } }
     fun cancel() { if (!state.value.busy) mutable.update { it.copy(pending = null) } }
-    fun pause() { foreground = false; mutable.update { it.copy(pending = null) } }
-    fun resume() { foreground = true }
+    fun pause() { foreground = false; tasks.pause(); mutable.update { it.copy(pending = null) } }
+    fun resume() { foreground = true; tasks.resume() }
     fun dismissError() { mutable.update { it.copy(error = null) } }
     fun selectKind(kind: RecordKind) {
         mutable.update { it.copy(composerKind = kind, activeEntry = it.activeEntry.copy(kind = kind), destination = Destination.WRITE, pending = null) }
@@ -86,15 +88,38 @@ class NfcViewModel internal constructor(application: Application, private val en
         val old = runCatching { state.value.importedMessage?.let { NdefCodec.editable(requireNotNull(NdefCodec.message(it))) } ?: state.value.draft }
             .getOrElse { notify("备份包含不可编辑记录，请先清空或直接原样写入"); return false }
         val next = if (old.any { it.id == record.id }) old.map { if (it.id == record.id) record else it } else old + record
-        return runCatching { NdefCodec.encode(next) }.onSuccess {
-            mutable.update { s -> s.copy(draft = next, importedMessage = null) }; saveDraft()
+        val sequence = state.value.sequenceMode || record.kind == RecordKind.DELAY
+        return runCatching { NdefCodec.encode(next, sequence) }.onSuccess {
+            mutable.update { s -> s.copy(draft = next, importedMessage = null, sequenceMode = sequence) }; saveDraft()
         }.onFailure { notify(it.message ?: "记录无效") }.isSuccess
     }
+    fun moveRecord(id: String, offset: Int) {
+        if (state.value.busy || state.value.pending != null || offset !in listOf(-1, 1)) return
+        val records = state.value.draft.toMutableList()
+        val index = records.indexOfFirst { it.id == id }
+        val target = index + offset
+        if (index < 0 || target !in records.indices) return
+        records.add(target, records.removeAt(index))
+        mutable.update { it.copy(draft = records) }; saveDraft()
+    }
+    fun sequence(enabled: Boolean) {
+        if (state.value.busy || state.value.pending != null) return
+        if (state.value.importedMessage != null) { notify("请先将备份转为可编辑记录"); return }
+        if (!enabled && state.value.draft.any { it.kind == RecordKind.DELAY }) { notify("等待步骤需要使用工具箱顺序任务"); return }
+        mutable.update { it.copy(sequenceMode = enabled) }; saveDraft()
+    }
+    fun prepareTasks(encoded: String?) {
+        if (state.value.busy || state.value.pending != null) return
+        runCatching {
+            val message = NdefCodec.message(encoded) ?: error("没有可执行内容")
+            check(tasks.prepare(message)) { "没有可执行内容，或已有任务尚未结束" }
+        }.onFailure { notify(it.message ?: "无法准备任务") }
+    }
     fun remove(id: String) { mutable.update { s -> s.copy(draft = s.draft.filterNot { it.id == id }) }; saveDraft() }
-    fun clearDraft() { mutable.update { it.copy(draft = emptyList(), importedMessage = null) }; saveDraft() }
-    private fun saveDraft() { store.saveDraft(state.value.draft, state.value.importedMessage) }
+    fun clearDraft() { mutable.update { it.copy(draft = emptyList(), importedMessage = null, sequenceMode = false) }; saveDraft() }
+    private fun saveDraft() { store.saveDraft(state.value.draft, state.value.importedMessage, state.value.sequenceMode) }
     fun messageBytes(): ByteArray? = runCatching {
-        state.value.importedMessage?.let { NdefCodec.fromBase64(it) } ?: NdefCodec.encode(state.value.draft).toByteArray()
+        state.value.importedMessage?.let { NdefCodec.fromBase64(it) } ?: NdefCodec.encode(state.value.draft, state.value.sequenceMode).toByteArray()
     }.getOrNull()
 
     fun arm(kind: OperationKind) {
@@ -123,11 +148,12 @@ class NfcViewModel internal constructor(application: Application, private val en
                 if (operation?.kind == OperationKind.WRITE) lastWrittenUid = tag.id.joinToString("") { "%02X".format(it) }
                 // Clear only after the engine has verified the write. Keep any new
                 // content received via a share/import while NFC I/O was running.
-                val clearWrittenDraft = singleWrite && state.value.draft == started.draft && state.value.importedMessage == started.importedMessage
+                val clearWrittenDraft = singleWrite && state.value.draft == started.draft && state.value.importedMessage == started.importedMessage && state.value.sequenceMode == started.sequenceMode
                 val clearWrittenEntry = singleWrite && state.value.activeEntry == started.activeEntry
                 mutable.update { it.copy(current = snapshot, currentSource = ReadSource.NFC, currentCardName = null,
                     draft = if (clearWrittenDraft) emptyList() else it.draft,
                     importedMessage = if (clearWrittenDraft) null else it.importedMessage,
+                    sequenceMode = if (clearWrittenDraft) false else it.sequenceMode,
                     activeEntry = if (clearWrittenEntry) DraftRecord(kind = it.composerKind) else it.activeEntry,
                     writtenCount = if (operation?.kind == OperationKind.WRITE) it.writtenCount + 1 else it.writtenCount,
                     destination = if (operation?.kind == OperationKind.WRITE && it.batchWrite) Destination.WRITE else Destination.READ,
@@ -137,6 +163,7 @@ class NfcViewModel internal constructor(application: Application, private val en
                 notify(if (operation == null) "已读取标签" else if (clearWrittenDraft && clearWrittenEntry) "写入完成，已清空待写入内容" else if (operation.kind == OperationKind.FORMAT) "格式化完成，请移开后重新扫描" else "${operation.kind.label}完成")
                 appendHistory(snapshot)
                 refreshSavedCards()
+                if (operation == null) NdefCodec.message(snapshot.messageBase64)?.takeIf(NdefCodec::isSequence)?.let { tasks.prepare(it) }
             } catch (e: Exception) {
                 val error = when (e) {
                     is TagLostException -> "卡片已移开，请贴近手机重新扫描；若刚执行写入，请检查内容"
@@ -186,7 +213,8 @@ class NfcViewModel internal constructor(application: Application, private val en
     }
     fun reuse(snapshot: TagSnapshot) {
         val message = snapshot.messageBase64 ?: return
-        mutable.update { it.copy(importedMessage = message, draft = emptyList(), destination = Destination.WRITE, pending = null) }
+        val sequence = runCatching { NdefCodec.isSequence(NdefCodec.message(message)) }.getOrDefault(false)
+        mutable.update { it.copy(importedMessage = message, draft = emptyList(), sequenceMode = sequence, destination = Destination.WRITE, pending = null) }
         saveDraft()
         notify("NDEF 内容已加入待写入区；UID 和加密区不会被复制")
     }
@@ -200,15 +228,16 @@ class NfcViewModel internal constructor(application: Application, private val en
         runCatching {
             val message = NdefCodec.message(snapshot.messageBase64) ?: error("此卡没有 NDEF 内容")
             val records = NdefCodec.editable(message)
-            NdefCodec.encode(records)
-            records
-        }.onSuccess { records -> mutable.update { it.copy(draft = records, importedMessage = null, destination = Destination.WRITE, pending = null) }; saveDraft() }
+            val sequence = NdefCodec.isSequence(message)
+            NdefCodec.encode(records, sequence)
+            records to sequence
+        }.onSuccess { (records, sequence) -> mutable.update { it.copy(draft = records, importedMessage = null, sequenceMode = sequence, destination = Destination.WRITE, pending = null) }; saveDraft() }
             .onFailure { notify(it.message ?: "无法直接编辑，可使用原样复制") }
     }
     fun editImported() {
         val encoded = state.value.importedMessage ?: return
-        runCatching { NdefCodec.editable(requireNotNull(NdefCodec.message(encoded))).also { NdefCodec.encode(it) } }
-            .onSuccess { records -> mutable.update { it.copy(draft = records, importedMessage = null) }; saveDraft() }
+        runCatching { val message = requireNotNull(NdefCodec.message(encoded)); val sequence = NdefCodec.isSequence(message); NdefCodec.editable(message).also { NdefCodec.encode(it, sequence) } to sequence }
+            .onSuccess { (records, sequence) -> mutable.update { it.copy(draft = records, importedMessage = null, sequenceMode = sequence) }; saveDraft() }
             .onFailure { notify(it.message ?: "无法转为可编辑记录") }
     }
     fun saveCard(tag: TagSnapshot, name: String = "", category: CardCategory = CardCategory.TAG) {
@@ -262,8 +291,8 @@ class NfcViewModel internal constructor(application: Application, private val en
                     } ?: error("无法打开此文件")
                 }
                 if (asNdef) {
-                    NdefCodec.parse(bytes)
-                    mutable.update { it.copy(importedMessage = NdefCodec.base64(bytes), draft = emptyList(), destination = Destination.WRITE) }
+                    val message = NdefCodec.parse(bytes)
+                    mutable.update { it.copy(importedMessage = NdefCodec.base64(bytes), draft = emptyList(), sequenceMode = NdefCodec.isSequence(message), destination = Destination.WRITE) }
                     saveDraft()
                     notify("已导入 NDEF，请确认内容后写入")
                 } else {

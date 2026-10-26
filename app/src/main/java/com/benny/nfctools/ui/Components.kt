@@ -41,6 +41,7 @@ fun RecordKind.icon(): ImageVector = when (this) {
     RecordKind.APPLICATION -> Icons.Outlined.Apps
     RecordKind.CUSTOM_URI -> Icons.AutoMirrored.Outlined.OpenInNew
     RecordKind.HEX -> Icons.Outlined.DataObject
+    RecordKind.DELAY -> Icons.Outlined.Timer
 }
 
 @Composable

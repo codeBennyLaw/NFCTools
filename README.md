@@ -8,7 +8,8 @@
 | --- | --- |
 | 读取 | 自动扫描；UID、正反序十进制卡号、协议、容量、状态、ATQA / SAK；读后直接编辑、保存到卡包或复制到新卡 |
 | 内容解析 | UTF-8 / UTF-16 文本、URI、联系人、Wi-Fi WSC、MIME 文件、HEX 原始记录 |
-| 快捷写入 | 文本、网址、Wi-Fi、打开 App、联系人、电话、邮件、短信、位置、文件、自定义 URI、HEX；直接录入或粘贴识别；连续写多张卡 |
+| 快捷写入 | 文本、网址、Wi-Fi、打开 App、联系人、电话、邮件、短信、位置、文件、自定义 URI、HEX、等待；上下调整顺序；连续写多张卡 |
+| 顺序任务 | 编排与等待写入卡片；预览后按顺序处理；外部应用返回后继续；暂停、重试、跳过与停止 |
 | 选择与分享 | 从已安装应用、通讯录选择；从浏览器或文件管理器的系统分享菜单导入 |
 | 卡包 | 最多 100 张，改名与分类；点击直达本机最新内容；同卡读写成功后自动更新；编辑、复制、比较 |
 | 文件 | 系统文件选择器导入任意类型小文件；从 MIME 记录取出文件；导入 / 导出原始 `.ndef` |
@@ -55,7 +56,13 @@ sdk.dir=D\:/Android_SDK
 
 一张卡可以在容量允许时一次写入多条 NDEF 记录：每条内容点“添加到列表，继续录入”，最后统一写入。本 App 最多录入 32 条，读取详情会显示全部内容，链接与应用提供各自的打开按钮。每次写入会替换原有 NDEF 消息，需要保留的旧内容应先读取并编辑后一起写入。
 
-**写入多条内容不等于手机自动执行全部操作。** Android 根据记录类型和应用记录选择处理入口，不能靠多个网址或多个应用记录让系统依次执行；组合自动化需要专门的执行器，本版不提供自动任务链。依据：[Android NFC 分发](https://developer.android.com/develop/connectivity/nfc/nfc)、[Android Application Record](https://developer.android.com/reference/android/nfc/NdefRecord#createApplicationRecord(java.lang.String))。
+需要编排执行时，在列表中用上下箭头调整顺序，可以加入 1–600 秒的“等待”，并开启“工具箱顺序任务”（添加等待会自动开启）。点击“预览执行顺序”可以先试运行，再将任务写入卡片；接收手机需安装本工具箱。任务标识和路由占用的额外容量已计入字节数。读取顺序任务卡会打开任务预览，点击“开始执行”后才处理；卡包详情也提供“按顺序执行”入口。
+
+文本步骤复制到剪贴板，等待结束后自动进入下一步；应用、链接、文件、联系人、拨号、邮件、短信与 Wi-Fi 会打开对应的应用或系统界面，返回后点击“已完成，继续下一步”。拨号、发送、保存联系人和连接网络由用户在系统界面确认。Android 11 以上 Wi-Fi 步骤提交系统网络确认，旧版打开 Wi-Fi 设置供手动连接。任务不会控制其他 App 内部操作，也不绕过系统确认。
+
+切后台或旋转会暂停正在进行的等待，继续时保留剩余时间；返回工具箱不会自行开始下一步。失败可重试、跳过或停止，运行中的任务使用固定副本，进程结束后不自动重放。
+
+多步处理由本工具箱执行。**普通 NDEF 模式下，写入多条记录仍不等于系统自动执行全部操作。** 依据：[Android NFC 分发](https://developer.android.com/develop/connectivity/nfc/nfc)、[Android Application Record](https://developer.android.com/reference/android/nfc/NdefRecord#createApplicationRecord(java.lang.String))、[Wi-Fi 系统确认](https://developer.android.com/develop/connectivity/wifi/wifi-save-network-passpoint-config)。
 
 `.ndef` 是原始 NDEF 消息，可以恢复为待写入内容。JSON 报告用于查看公开信息，不是整卡镜像，不能用于恢复整卡。
 MIME 记录只保存文件内容和类型，不保存原文件名；导出时使用生成的文件名。

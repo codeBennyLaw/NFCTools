@@ -3,6 +3,7 @@ package com.benny.nfctools.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -18,6 +19,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.benny.nfctools.NfcViewModel
 import com.benny.nfctools.data.*
@@ -36,7 +39,7 @@ fun QuickWriteScreen(state: AppState, vm: NfcViewModel, onFile: () -> Unit, onCo
     var more by rememberSaveable { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     val kind = state.composerKind
-    val bytes = remember(state.draft, state.importedMessage) { vm.messageBytes() }
+    val bytes = remember(state.draft, state.importedMessage, state.sequenceMode) { vm.messageBytes() }
     val available = !state.busy && state.pending == null
     fun add(start: Boolean) {
         if (value.isNotBlank() && kind != RecordKind.FILE) {
@@ -64,7 +67,7 @@ fun QuickWriteScreen(state: AppState, vm: NfcViewModel, onFile: () -> Unit, onCo
                         }
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val kinds = if (more) RecordKind.entries.toList() else listOf(RecordKind.TEXT, RecordKind.URI, RecordKind.WIFI, RecordKind.APPLICATION, RecordKind.CONTACT, RecordKind.FILE)
+                        val kinds = if (more) RecordKind.entries.toList() else listOf(RecordKind.TEXT, RecordKind.URI, RecordKind.WIFI, RecordKind.APPLICATION, RecordKind.DELAY, RecordKind.CONTACT, RecordKind.FILE)
                         kinds.forEach { type ->
                             FilterChip(selected = kind == type, onClick = { vm.selectKind(type); error = null; when (type) { RecordKind.APPLICATION -> onApplication(); RecordKind.CONTACT -> onContact(); RecordKind.FILE -> onFile(); else -> Unit } }, enabled = available,
                                 label = { Text(type.label) }, leadingIcon = { Icon(type.icon(), null, Modifier.size(18.dp)) }, modifier = Modifier.heightIn(min = 48.dp),
@@ -85,10 +88,11 @@ fun QuickWriteScreen(state: AppState, vm: NfcViewModel, onFile: () -> Unit, onCo
             }
             if (state.draft.isNotEmpty() || state.importedMessage != null) item {
                 SectionTitle("待写入 · ${bytes?.size ?: 0} B", "清空") { clear = true }
-                Text("可添加多条内容后一次写入；手机系统不会保证自动执行全部操作。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("上下移动调整顺序，也可插入等待。顺序任务由工具箱执行，外部应用返回后继续。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            items(state.draft, key = { it.id }) { record ->
+            itemsIndexed(state.draft, key = { _, record -> record.id }) { index, record ->
                 Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface) {
+                    Column {
                     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(record.kind.icon(), null, tint = MaterialTheme.colorScheme.primary)
                         Column(Modifier.weight(1f)) {
@@ -97,6 +101,14 @@ fun QuickWriteScreen(state: AppState, vm: NfcViewModel, onFile: () -> Unit, onCo
                         }
                         if (record.kind != RecordKind.FILE) IconButton(onClick = { onEdit(record) }, enabled = available) { Icon(Icons.Outlined.Edit, "编辑${record.kind.label}", Modifier.size(20.dp)) }
                         IconButton(onClick = { vm.remove(record.id) }, enabled = available) { Icon(Icons.Outlined.Close, "移除${record.kind.label}", Modifier.size(20.dp)) }
+                    }
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("第 ${index + 1} 项", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row {
+                            IconButton(onClick = { vm.moveRecord(record.id, -1) }, enabled = available && index > 0) { Icon(Icons.Outlined.ArrowUpward, "上移第 ${index + 1} 项") }
+                            IconButton(onClick = { vm.moveRecord(record.id, 1) }, enabled = available && index < state.draft.lastIndex) { Icon(Icons.Outlined.ArrowDownward, "下移第 ${index + 1} 项") }
+                        }
+                    }
                     }
                 }
             }
@@ -107,6 +119,16 @@ fun QuickWriteScreen(state: AppState, vm: NfcViewModel, onFile: () -> Unit, onCo
                     records.take(8).forEach { Text("${it.title}：${it.content.take(100)}", style = MaterialTheme.typography.bodyMedium) }
                     TextButton(onClick = { vm.editImported() }, enabled = available) { Text("转为可编辑记录") }
                 }
+            }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("工具箱顺序任务", fontWeight = FontWeight.Medium)
+                        Text("将编排写入卡片，接收手机需安装本工具箱；碰卡后预览并开始执行。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = state.sequenceMode, onCheckedChange = vm::sequence, enabled = available && state.importedMessage == null, modifier = Modifier.semantics { contentDescription = "工具箱顺序任务" })
+                }
+                if (bytes != null) OutlinedButton(onClick = { vm.prepareTasks(NdefCodec.base64(bytes)) }, enabled = available, modifier = Modifier.fillMaxWidth()) { Text("预览执行顺序") }
             }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -145,11 +167,11 @@ fun QuickFields(kind: RecordKind, value: String, secondary: String, tertiary: St
     val label = when (kind) {
         RecordKind.TEXT -> "文本内容"; RecordKind.URI -> "网址"; RecordKind.WIFI -> "Wi-Fi 名称"; RecordKind.CONTACT -> "姓名"
         RecordKind.APPLICATION -> "应用包名"; RecordKind.PHONE, RecordKind.SMS -> "电话号码"; RecordKind.EMAIL -> "收件人邮箱"
-        RecordKind.GEO -> "纬度"; RecordKind.CUSTOM_URI -> "应用链接 / URI"; RecordKind.HEX -> "十六进制数据"; RecordKind.FILE -> "文件"
+        RecordKind.GEO -> "纬度"; RecordKind.CUSTOM_URI -> "应用链接 / URI"; RecordKind.HEX -> "十六进制数据"; RecordKind.FILE -> "文件"; RecordKind.DELAY -> "等待秒数（1–600）"
     }
     OutlinedTextField(value, onValue, modifier = Modifier.fillMaxWidth(), enabled = enabled, label = { Text(label) },
         singleLine = kind !in listOf(RecordKind.TEXT, RecordKind.HEX), minLines = if (kind in listOf(RecordKind.TEXT, RecordKind.HEX)) 3 else 1,
-        keyboardOptions = KeyboardOptions(keyboardType = when (kind) { RecordKind.URI, RecordKind.CUSTOM_URI -> KeyboardType.Uri; RecordKind.PHONE, RecordKind.SMS -> KeyboardType.Phone; RecordKind.EMAIL -> KeyboardType.Email; else -> KeyboardType.Text }),
+        keyboardOptions = KeyboardOptions(keyboardType = when (kind) { RecordKind.DELAY -> KeyboardType.Number; RecordKind.URI, RecordKind.CUSTOM_URI -> KeyboardType.Uri; RecordKind.PHONE, RecordKind.SMS -> KeyboardType.Phone; RecordKind.EMAIL -> KeyboardType.Email; else -> KeyboardType.Text }),
         supportingText = when (kind) { RecordKind.URI -> ({ Text("example.com 即可，自动补全 https://") }); RecordKind.APPLICATION -> ({ Text("碰标签打开应用；接收手机需安装该 App") }); RecordKind.WIFI -> ({ Text("也可粘贴 WIFI: 格式的二维码文字自动填入") }); RecordKind.GEO -> ({ Text("-90 至 90，支持负数") }); else -> null })
     val secondLabel = when (kind) { RecordKind.WIFI -> "密码（开放网络留空）"; RecordKind.CONTACT -> "电话（可选）"; RecordKind.SMS -> "短信内容"; RecordKind.EMAIL -> "主题（可选）"; RecordKind.GEO -> "经度"; RecordKind.HEX -> "MIME 类型（默认 application/octet-stream）"; else -> null }
     if (secondLabel != null) OutlinedTextField(secondary, onSecondary, modifier = Modifier.fillMaxWidth(), enabled = enabled, label = { Text(secondLabel) }, singleLine = kind != RecordKind.SMS,

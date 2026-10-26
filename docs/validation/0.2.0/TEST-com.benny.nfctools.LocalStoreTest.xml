@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.benny.nfctools.LocalStoreTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-26T18:49:35.819Z" hostname="ALILEXIWALKER" time="0.291">
+<testsuite name="com.benny.nfctools.LocalStoreTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-10-26T19:36:30.176Z" hostname="ALILEXIWALKER" time="0.326">
   <properties/>
-  <testcase name="corruptedDraftDoesNotCrashStartup" classname="com.benny.nfctools.LocalStoreTest" time="0.093"/>
-  <testcase name="unfinishedQuickEntrySurvivesAStoreRestart" classname="com.benny.nfctools.LocalStoreTest" time="0.062"/>
-  <testcase name="historyRoundTripPreservesNullCapabilities" classname="com.benny.nfctools.LocalStoreTest" time="0.047"/>
-  <testcase name="savedCardPreservesCategoryAndMemoryDump" classname="com.benny.nfctools.LocalStoreTest" time="0.036"/>
-  <testcase name="draftAndImportedBackupPersistAcrossStoreInstances" classname="com.benny.nfctools.LocalStoreTest" time="0.053"/>
+  <testcase name="corruptedDraftDoesNotCrashStartup" classname="com.benny.nfctools.LocalStoreTest" time="0.099"/>
+  <testcase name="unfinishedQuickEntrySurvivesAStoreRestart" classname="com.benny.nfctools.LocalStoreTest" time="0.058"/>
+  <testcase name="historyRoundTripPreservesNullCapabilities" classname="com.benny.nfctools.LocalStoreTest" time="0.05"/>
+  <testcase name="savedCardPreservesCategoryAndMemoryDump" classname="com.benny.nfctools.LocalStoreTest" time="0.057"/>
+  <testcase name="draftAndImportedBackupPersistAcrossStoreInstances" classname="com.benny.nfctools.LocalStoreTest" time="0.061"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

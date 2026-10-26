@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.benny.nfctools.TaskRunnerTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-26T19:36:31.485Z" hostname="ALILEXIWALKER" time="0.12">
+  <properties/>
+  <testcase name="stoppingInvalidatesQueuedRequestsAndNewPlansStayIndependent" classname="com.benny.nfctools.TaskRunnerTest" time="0.036"/>
+  <testcase name="externalActivityBlocksTheNextStepUntilTheUserContinues" classname="com.benny.nfctools.TaskRunnerTest" time="0.018"/>
+  <testcase name="unsupportedRecordsAreShownAndCanBeSkippedWithoutLosingTheNextStep" classname="com.benny.nfctools.TaskRunnerTest" time="0.017"/>
+  <testcase name="failedStepsCanRetryAndOldRepliesCannotCompleteTheRetry" classname="com.benny.nfctools.TaskRunnerTest" time="0.017"/>
+  <testcase name="pausingBeforeDispatchPreventsStaleActionsFromLaunchingAfterResume" classname="com.benny.nfctools.TaskRunnerTest" time="0.014"/>
+  <testcase name="delayPausesWithItsRemainingTimeAndResumeDoesNotRunByItself" classname="com.benny.nfctools.TaskRunnerTest" time="0.017"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

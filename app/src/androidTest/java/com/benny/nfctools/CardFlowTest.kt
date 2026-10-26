@@ -35,6 +35,7 @@ class CardFlowTest {
     private lateinit var originalDraft: List<DraftRecord>
     private lateinit var originalEntry: DraftRecord
     private var originalImported: String? = null
+    private var originalMode = false
     private val old = snapshot("Old note", System.currentTimeMillis() - 60_000)
     private val card = SavedCard("card-flow-test", "床头卡", CardCategory.OTHER, old)
     private val engine = FakeNfc()
@@ -44,6 +45,7 @@ class CardFlowTest {
         originalHistory = store.loadHistory()
         originalDraft = store.draft()
         originalImported = store.imported()
+        originalMode = store.sequenceMode()
         originalEntry = store.quickEntry()
         store.saveCards(listOf(card))
         store.saveHistory(emptyList())
@@ -55,7 +57,7 @@ class CardFlowTest {
         instrumentation.runOnMainSync { viewModels.clear() }
         store.saveCards(originalCards)
         store.saveHistory(originalHistory)
-        store.saveDraft(originalDraft, originalImported)
+        store.saveDraft(originalDraft, originalImported, originalMode)
         store.saveQuickEntry(originalEntry)
     }
 

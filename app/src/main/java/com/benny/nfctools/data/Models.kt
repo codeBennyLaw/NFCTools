@@ -15,6 +15,7 @@ enum class RecordKind(val label: String, val description: String) {
     APPLICATION("打开应用", "选择手机里的 App，轻触打开"),
     CUSTOM_URI("自定义链接", "应用深层链接或其他 URI"),
     HEX("HEX 数据", "自定义 MIME 类型与十六进制内容"),
+    DELAY("等待", "按顺序执行时等待指定秒数"),
 }
 
 data class DraftRecord(
@@ -29,6 +30,7 @@ data class DraftRecord(
     val summary: String get() = when (kind) {
         RecordKind.WIFI -> "$value · Wi-Fi 网络"
         RecordKind.FILE -> value
+        RecordKind.DELAY -> "$value 秒"
         else -> value
     }
 }
@@ -76,6 +78,7 @@ data class AppState(
     val currentCardName: String? = null,
     val draft: List<DraftRecord> = emptyList(),
     val importedMessage: String? = null,
+    val sequenceMode: Boolean = false,
     val history: List<TagSnapshot> = emptyList(),
     val pending: PendingOperation? = null,
     val busy: Boolean = false,

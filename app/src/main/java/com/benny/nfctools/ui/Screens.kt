@@ -111,8 +111,11 @@ private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapsho
         tag.details["NDEF 读取"]?.let { InfoNote(it) }
         if (!contentFirst) TagActions(tag, vm, enabled)
         if (records.isNotEmpty()) {
+            if (records.size > 1 || NdefCodec.isSequence(message) || records.any { it.title == "等待" }) FilledTonalButton(onClick = { vm.prepareTasks(tag.messageBase64) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Outlined.PlayArrow, null); Spacer(Modifier.width(8.dp)); Text("按顺序执行 · ${records.size} 步")
+            }
             SectionTitle("标签内容 · ${records.size} 条", if (raw) "收起 HEX" else "查看 HEX") { raw = !raw }
-            if (records.size > 1) Text("多条内容可分别查看或打开；写入多条记录不会让系统自动执行全部操作。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (records.size > 1) Text("可逐项查看，或使用工具箱按顺序执行；打开外部应用后，返回并确认继续下一步。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             records.forEachIndexed { index, record ->
                 Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background, RoundedCornerShape(16.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("${index + 1}. ${record.title}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -120,10 +123,10 @@ private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapsho
                     if (record.content.length > 4096) Text("内容较长，导出 NDEF 可查看完整数据", style = MaterialTheme.typography.bodySmall)
                     Text("${record.type} · ${record.size} B", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (raw) SelectionContainer { Text(record.hex.take(4096), fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
-                    val original = message!!.records[index]
+                    val original = NdefCodec.visibleRecords(message)[index]
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { clipboard.setText(AnnotatedString(record.content)); vm.notify("内容已复制") }) { Text("复制内容") }
-                        if (original.toUri() != null || record.title == "打开应用") TextButton(onClick = {
+                        if (record.title != "等待" && (original.toUri() != null || record.title == "打开应用")) TextButton(onClick = {
                             runCatching {
                                 val intent = if (record.title == "打开应用") context.packageManager.getLaunchIntentForPackage(record.content) ?: error("手机未安装此应用")
                                 else android.content.Intent(android.content.Intent.ACTION_VIEW, original.toUri())

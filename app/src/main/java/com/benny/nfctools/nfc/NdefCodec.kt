@@ -12,15 +12,34 @@ import java.io.ByteArrayOutputStream
 
 object NdefCodec {
     const val MAX_FILE_BYTES = 48 * 1024
-    fun encode(records: List<DraftRecord>): NdefMessage {
+    const val SEQUENCE_TYPE = "com.benny.nfctools:sequence"
+    const val DELAY_TYPE = "com.benny.nfctools:delay"
+    private const val PACKAGE = "com.benny.nfctools"
+    fun isSequence(message: NdefMessage?): Boolean {
+        val records = message?.records ?: return false
+        return records.size >= 3 && records[0].tnf == NdefRecord.TNF_EXTERNAL_TYPE &&
+            records[0].type.toString(Charsets.US_ASCII) == SEQUENCE_TYPE && records[0].id.isEmpty() && records[0].payload.contentEquals(byteArrayOf(1)) &&
+            records[1].tnf == NdefRecord.TNF_EXTERNAL_TYPE && records[1].type.toString(Charsets.US_ASCII) == "android.com:pkg" &&
+            records[1].id.isEmpty() && records[1].payload.toString(Charsets.UTF_8) == PACKAGE
+    }
+    fun visibleRecords(message: NdefMessage?): List<NdefRecord> =
+        message?.records?.drop(if (isSequence(message)) 2 else 0) ?: emptyList()
+
+    fun encode(records: List<DraftRecord>, sequence: Boolean = false): NdefMessage {
         require(records.isNotEmpty()) { "请先添加至少一条记录" }
         require(records.size <= 32) { "最多添加 32 条记录" }
-        return NdefMessage(records.map(::encodeRecord).toTypedArray()).also {
+        val routing = if (sequence) listOf(NdefRecord.createExternal(PACKAGE, "sequence", byteArrayOf(1)), NdefRecord.createApplicationRecord(PACKAGE)) else emptyList()
+        return NdefMessage((routing + records.map(::encodeRecord)).toTypedArray()).also {
             require(it.toByteArray().size <= MAX_FILE_BYTES) { "总数据不能超过 48 KB，请缩小文件或减少记录" }
         }
     }
 
     fun encodeRecord(d: DraftRecord): NdefRecord = when (d.kind) {
+        RecordKind.DELAY -> {
+            val seconds = d.value.toIntOrNull()
+            require(seconds != null && seconds in 1..600) { "等待时间应为 1–600 秒的整数" }
+            NdefRecord.createExternal(PACKAGE, "delay", seconds.toString().toByteArray(Charsets.US_ASCII))
+        }
         RecordKind.TEXT -> {
             require(d.value.isNotBlank()) { "请输入文本内容" }
             NdefRecord.createTextRecord("zh", d.value)
@@ -105,12 +124,13 @@ object NdefCodec {
 
     fun summary(encoded: String?): String = runCatching {
         val message = message(encoded) ?: return "暂无 NDEF 内容"
-        if (message.records.all { it.tnf == NdefRecord.TNF_EMPTY }) return "内容已清空"
+        val records = visibleRecords(message)
+        if (records.all { it.tnf == NdefRecord.TNF_EMPTY }) return "内容已清空"
         val types = decode(message).map { it.title }.distinct().take(3).joinToString(" · ")
-        "$types · ${message.records.size} 条"
+        "$types · ${records.size} ${if (isSequence(message)) "步" else "条"}"
     }.getOrDefault("NDEF 内容无法解析")
 
-    fun decode(message: NdefMessage?): List<DecodedRecord> = message?.records?.map { r ->
+    fun decode(message: NdefMessage?): List<DecodedRecord> = visibleRecords(message).map { r ->
         var title = "原始数据"
         var content = r.payload.hex()
         val type = r.type.toString(Charsets.US_ASCII)
@@ -125,6 +145,7 @@ object NdefCodec {
                     content = r.payload.copyOfRange(start, r.payload.size).toString(if (status and 0x80 != 0) Charsets.UTF_16 else Charsets.UTF_8)
                 }
                 r.tnf == NdefRecord.TNF_EXTERNAL_TYPE && type == "android.com:pkg" -> { title = "打开应用"; content = r.payload.toString(Charsets.UTF_8) }
+                r.tnf == NdefRecord.TNF_EXTERNAL_TYPE && type == DELAY_TYPE -> { title = "等待"; content = "${r.payload.toString(Charsets.US_ASCII)} 秒" }
                 r.toUri() != null -> { title = "链接 / URI"; content = r.toUri().toString() }
                 r.tnf == NdefRecord.TNF_MIME_MEDIA -> {
                     title = when (type) { "text/vcard", "text/x-vcard" -> "联系人"; "application/vnd.wfa.wsc" -> "Wi-Fi 配置"; else -> "文件 / MIME" }
@@ -138,7 +159,7 @@ object NdefCodec {
         } catch (_: RuntimeException) { title = "无法解析的记录" }
         val raw = NdefMessage(arrayOf(r)).toByteArray()
         DecodedRecord(title, content, "TNF ${r.tnf} · ${type.ifEmpty { "无类型" }}", raw.size, raw.hex())
-    } ?: emptyList()
+    }
 
     fun parse(bytes: ByteArray): NdefMessage {
         require(bytes.isNotEmpty() && bytes.size <= MAX_FILE_BYTES) { "NDEF 数据大小需为 1 字节至 48 KB" }
@@ -165,10 +186,11 @@ object NdefCodec {
         return "网络名称：$ssid\n${if (protected) "包含网络凭据，可通过 HEX 或导出查看" else "开放网络"}"
     }
     fun message(base64: String?): NdefMessage? = base64?.let { parse(fromBase64(it)) }
-    fun editable(message: NdefMessage): List<DraftRecord> = message.records.filter { it.tnf != NdefRecord.TNF_EMPTY }.map { r ->
+    fun editable(message: NdefMessage): List<DraftRecord> = visibleRecords(message).filter { it.tnf != NdefRecord.TNF_EMPTY }.map { r ->
         require(r.id.isEmpty()) { "此记录带有自定义 ID，请使用原样复制以保留数据" }
         val type = r.type.toString(Charsets.US_ASCII)
         when {
+            r.tnf == NdefRecord.TNF_EXTERNAL_TYPE && type == DELAY_TYPE -> DraftRecord(kind = RecordKind.DELAY, value = r.payload.toString(Charsets.US_ASCII)).also { encodeRecord(it) }
             r.tnf == NdefRecord.TNF_WELL_KNOWN && r.type.contentEquals(NdefRecord.RTD_TEXT) -> DraftRecord(value = decode(NdefMessage(arrayOf(r))).single().content)
             r.tnf == NdefRecord.TNF_EXTERNAL_TYPE && type == "android.com:pkg" -> DraftRecord(kind = RecordKind.APPLICATION, value = r.payload.toString(Charsets.UTF_8))
             type == "application/vnd.wfa.wsc" -> {

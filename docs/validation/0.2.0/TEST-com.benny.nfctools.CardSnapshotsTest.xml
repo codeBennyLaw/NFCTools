@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.benny.nfctools.CardSnapshotsTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-26T18:49:32.151Z" hostname="ALILEXIWALKER" time="3.661">
+<testsuite name="com.benny.nfctools.CardSnapshotsTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-10-26T19:36:29.891Z" hostname="ALILEXIWALKER" time="0.267">
   <properties/>
-  <testcase name="latestUsesTimestampAndMatchesFormattedUid" classname="com.benny.nfctools.CardSnapshotsTest" time="3.413"/>
-  <testcase name="currentResultWinsTimestampTiesAndAnOlderHistoryCannotRollbackIt" classname="com.benny.nfctools.CardSnapshotsTest" time="0.03"/>
-  <testcase name="missingUidAndImportedFileNamesDoNotMatchAsPhysicalCards" classname="com.benny.nfctools.CardSnapshotsTest" time="0.025"/>
-  <testcase name="multiRecordSummaryListsFeaturesWithoutExposingTheirValues" classname="com.benny.nfctools.CardSnapshotsTest" time="0.091"/>
-  <testcase name="successfulEraseReplacesOldContentEvenWhenTheMessageIsEmpty" classname="com.benny.nfctools.CardSnapshotsTest" time="0.028"/>
-  <testcase name="aPartialReadDoesNotEraseTheLastKnownContent" classname="com.benny.nfctools.CardSnapshotsTest" time="0.025"/>
-  <testcase name="anotherCardAndDemoNeverReplaceTheSavedCard" classname="com.benny.nfctools.CardSnapshotsTest" time="0.024"/>
-  <testcase name="summaryDistinguishesErasedMissingAndInvalidMessages" classname="com.benny.nfctools.CardSnapshotsTest" time="0.021"/>
+  <testcase name="latestUsesTimestampAndMatchesFormattedUid" classname="com.benny.nfctools.CardSnapshotsTest" time="0.037"/>
+  <testcase name="currentResultWinsTimestampTiesAndAnOlderHistoryCannotRollbackIt" classname="com.benny.nfctools.CardSnapshotsTest" time="0.035"/>
+  <testcase name="missingUidAndImportedFileNamesDoNotMatchAsPhysicalCards" classname="com.benny.nfctools.CardSnapshotsTest" time="0.024"/>
+  <testcase name="multiRecordSummaryListsFeaturesWithoutExposingTheirValues" classname="com.benny.nfctools.CardSnapshotsTest" time="0.07"/>
+  <testcase name="successfulEraseReplacesOldContentEvenWhenTheMessageIsEmpty" classname="com.benny.nfctools.CardSnapshotsTest" time="0.026"/>
+  <testcase name="aPartialReadDoesNotEraseTheLastKnownContent" classname="com.benny.nfctools.CardSnapshotsTest" time="0.029"/>
+  <testcase name="anotherCardAndDemoNeverReplaceTheSavedCard" classname="com.benny.nfctools.CardSnapshotsTest" time="0.021"/>
+  <testcase name="summaryDistinguishesErasedMissingAndInvalidMessages" classname="com.benny.nfctools.CardSnapshotsTest" time="0.023"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

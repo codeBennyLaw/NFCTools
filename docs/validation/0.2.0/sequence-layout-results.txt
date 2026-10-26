@@ -1,0 +1,6 @@
+
+com.benny.nfctools.SequenceFlowTest:....
+
+Time: 23.831
+
+OK (4 tests)

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.benny.nfctools.SequenceCodecTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-10-26T19:36:31.055Z" hostname="ALILEXIWALKER" time="0.117">
+  <properties/>
+  <testcase name="routingOverheadCountsTowardsTheTotalCapacityLimit" classname="com.benny.nfctools.SequenceCodecTest" time="0.024"/>
+  <testcase name="sequenceRoundTripPreservesOrderAndHidesRoutingFromContent" classname="com.benny.nfctools.SequenceCodecTest" time="0.021"/>
+  <testcase name="anotherMetadataVersionIsNeverSilentlyRemoved" classname="com.benny.nfctools.SequenceCodecTest" time="0.02"/>
+  <testcase name="delayRequiresAnIntegerBetweenOneAndSixHundredSeconds" classname="com.benny.nfctools.SequenceCodecTest" time="0.02"/>
+  <testcase name="ordinaryRecordsKeepTheirStandardEncoding" classname="com.benny.nfctools.SequenceCodecTest" time="0.014"/>
+  <testcase name="stepLimitExcludesRoutingButStillLimitsTheUserPlan" classname="com.benny.nfctools.SequenceCodecTest" time="0.018"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

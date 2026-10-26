@@ -24,3 +24,7 @@ scan illustration with a compact status panel so common actions fit on screen.
   time. Show content and per-record actions before technical metadata. A saved
   snapshot is not presented as a new physical scan; do not run actions on open.
 - NFC I/O and bounded file reads run off the main thread. No network permission.
+- Reorder tasks with labelled 48 dp move buttons and numbered rows. A bounded,
+  scrollable task sheet keeps execution controls visible at larger font sizes.
+  Show a preview before starting. Pause at external activities and require
+  explicit continuation after returning; backgrounding pauses local execution.
