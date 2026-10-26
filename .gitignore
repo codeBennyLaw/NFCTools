@@ -7,7 +7,7 @@ local.properties
 *.iml
 captures/
 .opencode/
-dist/*.apk
+dist/
 *.jks
 *.keystore
 keystore.properties

@@ -1,0 +1,3 @@
+<resources>
+    <string name="nfc_dispatch_permission" translatable="false">android.permission.DISPATCH_NFC_MESSAGE</string>
+</resources>

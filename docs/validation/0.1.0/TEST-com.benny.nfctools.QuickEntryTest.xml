@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.benny.nfctools.QuickEntryTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-10-26T10:39:45.835Z" hostname="ALILEXIWALKER" time="0.283">
+  <properties/>
+  <testcase name="rawHexRequiresCompleteBytes" classname="com.benny.nfctools.QuickEntryTest" time="0.026"/>
+  <testcase name="mixedRecordsBecomeEditableWithoutDroppingFilePayload" classname="com.benny.nfctools.QuickEntryTest" time="0.023"/>
+  <testcase name="commonClipboardValuesAreRecognizedWithoutRetyping" classname="com.benny.nfctools.QuickEntryTest" time="0.022"/>
+  <testcase name="comparisonFindsLengthAndContentDifferences" classname="com.benny.nfctools.QuickEntryTest" time="0.024"/>
+  <testcase name="uriQueryFieldsAreDecodedForEditing" classname="com.benny.nfctools.QuickEntryTest" time="0.023"/>
+  <testcase name="applicationRecordCanBeReadAndEdited" classname="com.benny.nfctools.QuickEntryTest" time="0.031"/>
+  <testcase name="unknownRecordsKeepTheOriginalCopyPathInsteadOfLosingData" classname="com.benny.nfctools.QuickEntryTest" time="0.025"/>
+  <testcase name="wifiQrTextPreservesEscapedSeparators" classname="com.benny.nfctools.QuickEntryTest" time="0.022"/>
+  <testcase name="urlCanBeEnteredWithoutScheme" classname="com.benny.nfctools.QuickEntryTest" time="0.027"/>
+  <testcase name="binaryDumpSizesAreChecked" classname="com.benny.nfctools.QuickEntryTest" time="0.031"/>
+  <testcase name="mctDumpRoundTripPreservesUnreadableBlocks" classname="com.benny.nfctools.QuickEntryTest" time="0.029"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
