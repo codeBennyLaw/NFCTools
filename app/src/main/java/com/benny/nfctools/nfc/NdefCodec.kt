@@ -8,6 +8,7 @@ import androidx.core.net.toUri
 import com.benny.nfctools.data.DecodedRecord
 import com.benny.nfctools.data.DraftRecord
 import com.benny.nfctools.data.RecordKind
+import com.benny.nfctools.system.SystemAction
 import java.io.ByteArrayOutputStream
 
 object NdefCodec {
@@ -24,6 +25,7 @@ object NdefCodec {
         require(message.records.size == 1 && message.records.single().tnf != NdefRecord.TNF_EMPTY) { "一张卡只能录入一个操作，请选择其中一项" }
         val record = message.records.single()
         require(record.tnf != NdefRecord.TNF_EXTERNAL_TYPE || record.type.toString(Charsets.US_ASCII) !in listOf("com.benny.nfctools:sequence", "com.benny.nfctools:delay")) { "旧版任务步骤仅供查看，请选择一个普通操作" }
+        if (SystemAction.isRecord(record)) SystemAction.fromRecord(record)
         return message
     }
 
@@ -40,6 +42,7 @@ object NdefCodec {
     }
 
     fun encodeRecord(d: DraftRecord): NdefRecord = when (d.kind) {
+        RecordKind.SYSTEM -> SystemAction.fromDraft(d).record()
         RecordKind.TEXT -> {
             require(d.value.isNotBlank()) { "请输入文本内容" }
             NdefRecord.createTextRecord("zh", d.value)
@@ -136,6 +139,7 @@ object NdefCodec {
         val type = r.type.toString(Charsets.US_ASCII)
         try {
             when {
+                SystemAction.isRecord(r) -> { title = "系统功能"; content = requireNotNull(SystemAction.fromRecord(r)).description }
                 r.tnf == NdefRecord.TNF_EMPTY -> { title = "空记录"; content = "此标签的 NDEF 内容已清空" }
                 r.tnf == NdefRecord.TNF_WELL_KNOWN && r.type.contentEquals(NdefRecord.RTD_TEXT) -> {
                     title = "文本"
@@ -190,6 +194,7 @@ object NdefCodec {
         require(r.id.isEmpty()) { "此记录带有自定义 ID，请使用原样复制以保留数据" }
         val type = r.type.toString(Charsets.US_ASCII)
         when {
+            SystemAction.isRecord(r) -> requireNotNull(SystemAction.fromRecord(r)).draft()
             r.tnf == NdefRecord.TNF_WELL_KNOWN && r.type.contentEquals(NdefRecord.RTD_TEXT) -> DraftRecord(value = decode(NdefMessage(arrayOf(r))).single().content)
             r.tnf == NdefRecord.TNF_EXTERNAL_TYPE && type == "android.com:pkg" -> DraftRecord(kind = RecordKind.APPLICATION, value = r.payload.toString(Charsets.UTF_8))
             type == "application/vnd.wfa.wsc" -> {

@@ -107,6 +107,7 @@ fun NfcApp(vm: NfcViewModel, openSettings: () -> Unit) {
     BackHandler(enabled = state.destination != Destination.READ && state.pending == null && !state.busy && !settings && confirmation == null) { vm.navigate(Destination.READ) }
 
     NfcTheme(state.darkMode) {
+        SystemActionHost(vm)
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = { SnackbarHost(snackbar) },

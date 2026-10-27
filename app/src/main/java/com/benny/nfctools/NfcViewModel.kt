@@ -12,6 +12,7 @@ import com.benny.nfctools.nfc.NfcEngine
 import com.benny.nfctools.nfc.NfcOperations
 import com.benny.nfctools.nfc.QuickEntry
 import com.benny.nfctools.nfc.MemoryDumpCodec
+import com.benny.nfctools.system.SystemAction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
@@ -39,6 +40,10 @@ class NfcViewModel internal constructor(application: Application, private val en
     val state = mutable.asStateFlow()
     private val notices = Channel<String>(Channel.BUFFERED)
     val messages = notices.receiveAsFlow()
+    private val systemActions = Channel<SystemAction>(Channel.BUFFERED)
+    val systemRequests = systemActions.receiveAsFlow()
+    private var lastSystemScan: Pair<String, Long>? = null
+    fun requestSystemAction(action: SystemAction) { if (foreground && !state.value.busy) systemActions.trySend(action) }
 
     init {
         viewModelScope.launch {
@@ -65,7 +70,12 @@ class NfcViewModel internal constructor(application: Application, private val en
     fun navigate(destination: Destination) { if (!state.value.busy) mutable.update { it.copy(destination = destination, pending = null) } }
     fun theme(mode: String) { store.saveTheme(mode); mutable.update { it.copy(darkMode = mode) } }
     fun cancel() { if (!state.value.busy) mutable.update { it.copy(pending = null) } }
-    fun pause() { foreground = false; mutable.update { it.copy(pending = null) } }
+    fun pause() {
+        foreground = false
+        // Scans waiting for the UI must not run on a later foreground visit.
+        while (systemActions.tryReceive().isSuccess) { }
+        mutable.update { it.copy(pending = null) }
+    }
     fun resume() { foreground = true }
     fun dismissError() { mutable.update { it.copy(error = null) } }
     fun selectKind(kind: RecordKind) {
@@ -148,6 +158,18 @@ class NfcViewModel internal constructor(application: Application, private val en
                 notify(if (operation == null) "已读取标签" else if (clearWrittenDraft && clearWrittenEntry) "写入完成，已清空待写入内容" else if (operation.kind == OperationKind.FORMAT) "格式化完成，请移开后重新扫描" else "${operation.kind.label}完成")
                 appendHistory(snapshot)
                 refreshSavedCards()
+                if (operation == null && foreground && !snapshot.sample) {
+                    runCatching { SystemAction.fromMessage(NdefCodec.message(snapshot.messageBase64)) }.onSuccess { action ->
+                        if (action != null) {
+                            val key = snapshot.uid + action.json()
+                            val now = android.os.SystemClock.elapsedRealtime()
+                            if (lastSystemScan?.let { it.first == key && now - it.second < 1500 } != true) {
+                                lastSystemScan = key to now
+                                systemActions.trySend(action)
+                            }
+                        }
+                    }.onFailure { notify("系统操作内容无效，未执行") }
+                }
             } catch (e: Exception) {
                 val error = when (e) {
                     is TagLostException -> "卡片已移开，请贴近手机重新扫描；若刚执行写入，请检查内容"

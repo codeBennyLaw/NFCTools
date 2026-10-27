@@ -24,6 +24,7 @@ import com.benny.nfctools.NfcViewModel
 import com.benny.nfctools.data.*
 import com.benny.nfctools.nfc.NdefCodec
 import com.benny.nfctools.nfc.MemoryDumpCodec
+import com.benny.nfctools.system.SystemAction
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -121,6 +122,11 @@ private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapsho
                     Text("${record.type} · ${record.size} B", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (raw) SelectionContainer { Text(record.hex.take(4096), fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
                     val original = NdefCodec.contentRecords(message)[index]
+                    val systemAction = runCatching { SystemAction.fromRecord(original) }.getOrNull()
+                    if (systemAction != null) {
+                        Text(systemAction.function.help, style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = { vm.requestSystemAction(systemAction) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("执行此操作") }
+                    }
                     if (message.records.size > 1) OutlinedButton(onClick = { vm.selectRecord(tag, index) }, enabled = enabled && NdefCodec.isSingleOperation(android.nfc.NdefMessage(arrayOf(original))), modifier = Modifier.fillMaxWidth()) { Text("录入此操作") }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { clipboard.setText(AnnotatedString(record.content)); vm.notify("内容已复制") }) { Text("复制内容") }
@@ -132,7 +138,7 @@ private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapsho
                             }.onFailure { vm.notify(it.message ?: "没有可处理此内容的应用") }
                         }, enabled = enabled) { Text(if (record.title == "打开应用") "打开 App" else "打开内容") }
                     }
-                    if (original.tnf == android.nfc.NdefRecord.TNF_MIME_MEDIA) TextButton(onClick = {
+                    if (original.tnf == android.nfc.NdefRecord.TNF_MIME_MEDIA && !SystemAction.isRecord(original)) TextButton(onClick = {
                         val mime = original.toMimeType().orEmpty()
                         val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "bin"
                         onExportPayload(original.payload, "nfc-record-${index + 1}.$extension")

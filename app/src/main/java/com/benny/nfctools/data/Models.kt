@@ -13,6 +13,7 @@ enum class RecordKind(val label: String, val description: String) {
     GEO("位置", "经纬度坐标"),
     FILE("文件", "将小文件作为 MIME 数据写入"),
     APPLICATION("打开应用", "选择手机里的 App，轻触打开"),
+    SYSTEM("系统功能", "音量、亮度、手电筒、勿扰与系统设置"),
     CUSTOM_URI("自定义链接", "应用深层链接或其他 URI"),
     HEX("HEX 数据", "自定义 MIME 类型与十六进制内容"),
 }

@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.benny.nfctools.NfcViewModel
 import com.benny.nfctools.data.*
 import com.benny.nfctools.nfc.NdefCodec
+import com.benny.nfctools.system.SystemAction
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -59,7 +60,7 @@ fun QuickWriteScreen(state: AppState, vm: NfcViewModel, onFile: () -> Unit, onCo
                     }
                     Text("每张卡只录入一个操作，写入会替换卡片上的原内容。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val kinds = if (more) RecordKind.entries.toList() else listOf(RecordKind.TEXT, RecordKind.URI, RecordKind.WIFI, RecordKind.APPLICATION, RecordKind.CONTACT, RecordKind.FILE)
+                        val kinds = if (more) RecordKind.entries.toList() else listOf(RecordKind.TEXT, RecordKind.URI, RecordKind.WIFI, RecordKind.APPLICATION, RecordKind.SYSTEM, RecordKind.CONTACT, RecordKind.FILE)
                         kinds.forEach { type ->
                             FilterChip(selected = kind == type && state.importedMessage == null, onClick = { vm.selectKind(type); error = null; when (type) { RecordKind.APPLICATION -> onApplication(); RecordKind.CONTACT -> onContact(); RecordKind.FILE -> onFile(); else -> Unit } }, enabled = available,
                                 label = { Text(type.label) }, leadingIcon = { Icon(type.icon(), null, Modifier.size(18.dp)) }, modifier = Modifier.heightIn(min = 48.dp),
@@ -75,6 +76,13 @@ fun QuickWriteScreen(state: AppState, vm: NfcViewModel, onFile: () -> Unit, onCo
                         kind == RecordKind.FILE -> {
                             Text(file?.let { "已选择：${it.value}" } ?: "选择要写入的小文件", style = MaterialTheme.typography.bodyMedium)
                             OutlinedButton(onClick = { error = null; onFile() }, enabled = available, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Icon(Icons.Outlined.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text(if (file == null) "选择文件" else "更换文件") }
+                        }
+                        kind == RecordKind.SYSTEM -> {
+                            SystemActionFields(state.activeEntry.value, state.activeEntry.secondary, available) { action ->
+                                vm.updateEntry(value = action.function.name, secondary = action.argument); error = null
+                            }
+                            val action = runCatching { SystemAction.fromDraft(state.activeEntry) }.getOrNull()
+                            if (action != null) OutlinedButton(onClick = { vm.requestSystemAction(action) }, enabled = available, modifier = Modifier.fillMaxWidth()) { Text("在本机试运行") }
                         }
                         else -> {
                             if (kind == RecordKind.APPLICATION) OutlinedButton(onClick = onApplication, enabled = available, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Outlined.Apps, null); Spacer(Modifier.width(8.dp)); Text("选择已安装应用") }
@@ -123,7 +131,7 @@ fun QuickFields(kind: RecordKind, value: String, secondary: String, tertiary: St
     val label = when (kind) {
         RecordKind.TEXT -> "文本内容"; RecordKind.URI -> "网址"; RecordKind.WIFI -> "Wi-Fi 名称"; RecordKind.CONTACT -> "姓名"
         RecordKind.APPLICATION -> "应用包名"; RecordKind.PHONE, RecordKind.SMS -> "电话号码"; RecordKind.EMAIL -> "收件人邮箱"
-        RecordKind.GEO -> "纬度"; RecordKind.CUSTOM_URI -> "应用链接 / URI"; RecordKind.HEX -> "十六进制数据"; RecordKind.FILE -> "文件"
+        RecordKind.GEO -> "纬度"; RecordKind.CUSTOM_URI -> "应用链接 / URI"; RecordKind.HEX -> "十六进制数据"; RecordKind.FILE -> "文件"; RecordKind.SYSTEM -> "系统功能"
     }
     OutlinedTextField(value, onValue, modifier = Modifier.fillMaxWidth(), enabled = enabled, label = { Text(label) },
         singleLine = kind !in listOf(RecordKind.TEXT, RecordKind.HEX), minLines = if (kind in listOf(RecordKind.TEXT, RecordKind.HEX)) 3 else 1,

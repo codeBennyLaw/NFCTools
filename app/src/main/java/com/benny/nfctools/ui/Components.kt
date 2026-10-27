@@ -39,6 +39,7 @@ fun RecordKind.icon(): ImageVector = when (this) {
     RecordKind.GEO -> Icons.Outlined.LocationOn
     RecordKind.FILE -> Icons.AutoMirrored.Outlined.InsertDriveFile
     RecordKind.APPLICATION -> Icons.Outlined.Apps
+    RecordKind.SYSTEM -> Icons.Outlined.SettingsSuggest
     RecordKind.CUSTOM_URI -> Icons.AutoMirrored.Outlined.OpenInNew
     RecordKind.HEX -> Icons.Outlined.DataObject
 }
