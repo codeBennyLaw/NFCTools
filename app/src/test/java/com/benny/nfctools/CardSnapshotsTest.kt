@@ -53,10 +53,10 @@ class CardSnapshotsTest {
     }
 
     @Test fun multiRecordSummaryListsFeaturesWithoutExposingTheirValues() {
-        val message = NdefCodec.encode(listOf(
+        val message = NdefMessage(listOf(
             DraftRecord(kind = RecordKind.APPLICATION, value = "com.android.settings"),
             DraftRecord(kind = RecordKind.WIFI, value = "Home", secondary = "secret123"),
-            DraftRecord(kind = RecordKind.URI, value = "https://example.com")))
+            DraftRecord(kind = RecordKind.URI, value = "https://example.com")).map(NdefCodec::encodeRecord).toTypedArray())
         val summary = NdefCodec.summary(NdefCodec.base64(message.toByteArray()))
         assertTrue(summary.contains("打开应用"))
         assertTrue(summary.contains("Wi-Fi 配置"))

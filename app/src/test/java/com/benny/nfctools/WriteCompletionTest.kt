@@ -57,15 +57,7 @@ class WriteCompletionTest {
     }
 
     @Test fun successfulSingleWriteClearsListAndFieldsFromPersistentStorage() {
-        val records = listOf(
-            DraftRecord(value = "A note"),
-            DraftRecord(kind = RecordKind.URI, value = "https://example.com"),
-            DraftRecord(kind = RecordKind.WIFI, value = "Network", secondary = "password123"),
-            DraftRecord(kind = RecordKind.APPLICATION, value = "com.android.settings"),
-            DraftRecord(kind = RecordKind.FILE, value = "small.bin", base64 = NdefCodec.base64(byteArrayOf(1, 2, 3))),
-        )
-        records.forEach { assertTrue(vm.add(it)) }
-        vm.quickEntry(DraftRecord(kind = RecordKind.WIFI, value = "Network", secondary = "password123"))
+        assertTrue(vm.add(DraftRecord(kind = RecordKind.WIFI, value = "Network", secondary = "password123")))
         val written = requireNotNull(vm.messageBytes())
         write()
 
@@ -95,7 +87,6 @@ class WriteCompletionTest {
     @Test fun failedWritePreservesContentForRetryAndOnlySuccessClearsIt() {
         val record = DraftRecord(value = "Retry me")
         vm.add(record)
-        vm.quickEntry(record)
         engine.failure = IOException("Read-back verification failed")
         vm.arm(OperationKind.WRITE)
         vm.onTag(tag(1))
@@ -155,7 +146,6 @@ class WriteCompletionTest {
 
     @Test fun newlySharedContentDuringWriteIsKeptForTheNextWrite() {
         vm.add(DraftRecord(value = "Old content"))
-        vm.quickEntry(DraftRecord(value = "Old entry"))
         val writing = CountDownLatch(1)
         engine.beforeReturn = {
             writing.countDown()
@@ -168,7 +158,6 @@ class WriteCompletionTest {
         val next = DraftRecord(value = "New shared content")
         vm.clearDraft()
         vm.add(next)
-        vm.quickEntry(next)
         releaseWrite.countDown()
         waitFor { vm.state.value.writtenCount == 1 && !vm.state.value.busy }
         assertEquals(listOf(next), store.draft())

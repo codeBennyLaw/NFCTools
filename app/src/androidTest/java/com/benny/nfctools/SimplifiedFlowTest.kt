@@ -59,10 +59,7 @@ class SimplifiedFlowTest {
         app.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("编辑读到的内容"))
         app.onNodeWithText("编辑读到的内容").performScrollTo().performClick()
         app.runOnIdle { assertEquals(Destination.WRITE, vm.state.value.destination) }
-        app.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Edit me"))
-        app.onNodeWithContentDescription("编辑文本").performClick()
-        app.onNode(hasText("文本内容") and hasAnyAncestor(isDialog())).performTextReplacement("Changed")
-        app.onNodeWithText("保存记录").performClick()
-        app.runOnIdle { assertEquals("Changed", vm.state.value.draft.single().value) }
+        app.onNode(hasSetTextAction() and hasText("Edit me")).performTextReplacement("Changed")
+        app.runOnIdle { assertEquals("Changed", vm.state.value.activeEntry.value); assertEquals("Changed", com.benny.nfctools.nfc.NdefCodec.decode(com.benny.nfctools.nfc.NdefCodec.parse(requireNotNull(vm.messageBytes()))).single().content) }
     }
 }

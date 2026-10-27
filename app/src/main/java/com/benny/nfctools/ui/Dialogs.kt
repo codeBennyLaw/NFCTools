@@ -20,53 +20,6 @@ import com.benny.nfctools.data.DraftRecord
 import com.benny.nfctools.data.RecordKind
 import com.benny.nfctools.nfc.NdefCodec
 
-@Composable
-fun RecordEditor(record: DraftRecord, onDismiss: () -> Unit, onSave: (DraftRecord) -> Unit) {
-    var value by rememberSaveable(record.id) { mutableStateOf(record.value) }
-    var secondary by rememberSaveable(record.id) { mutableStateOf(record.secondary) }
-    var tertiary by rememberSaveable(record.id) { mutableStateOf(record.tertiary) }
-    var error by rememberSaveable(record.id) { mutableStateOf<String?>(null) }
-    var passwordVisible by rememberSaveable { mutableStateOf(false) }
-    val kind = record.kind
-    val firstLabel = when (kind) {
-        RecordKind.TEXT -> "文本内容"; RecordKind.URI -> "完整网址"; RecordKind.WIFI -> "网络名称（SSID）";
-        RecordKind.CONTACT -> "联系人姓名"; RecordKind.PHONE, RecordKind.SMS -> "电话号码";
-        RecordKind.EMAIL -> "收件人邮箱"; RecordKind.GEO -> "纬度"; RecordKind.FILE -> "文件名称";
-        RecordKind.APPLICATION -> "应用包名"; RecordKind.CUSTOM_URI -> "应用链接 / URI"; RecordKind.HEX -> "十六进制数据"; RecordKind.DELAY -> "等待秒数（1–600）"
-    }
-    val secondLabel = when (kind) { RecordKind.WIFI -> "密码（开放网络留空）"; RecordKind.CONTACT -> "电话号码（可选）"; RecordKind.EMAIL -> "邮件主题（可选）"; RecordKind.SMS -> "短信内容（可选）"; RecordKind.GEO -> "经度"; RecordKind.HEX -> "MIME 类型（默认 application/octet-stream）"; else -> null }
-    val keyboard = when (kind) { RecordKind.PHONE, RecordKind.SMS -> KeyboardType.Phone; RecordKind.EMAIL -> KeyboardType.Email; RecordKind.URI -> KeyboardType.Uri; RecordKind.GEO -> KeyboardType.Text; else -> KeyboardType.Text }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Icon(kind.icon(), null) },
-        title = { Text("${if (record.value.isEmpty()) "添加" else "编辑"}${kind.label}") },
-        text = {
-            Column(Modifier.fillMaxWidth().heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text(kind.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedTextField(value = value, onValueChange = { value = it; error = null }, label = { Text(firstLabel) },
-                    modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = keyboard),
-                    singleLine = kind != RecordKind.TEXT, minLines = if (kind == RecordKind.TEXT) 4 else 1,
-                    isError = error != null,
-                    supportingText = when (kind) { RecordKind.URI -> ({ Text("例如：https://example.com") }); RecordKind.GEO -> ({ Text("范围 -90 至 90，支持负数") }); else -> null })
-                if (secondLabel != null) OutlinedTextField(value = secondary, onValueChange = { secondary = it; error = null }, label = { Text(secondLabel) },
-                    modifier = Modifier.fillMaxWidth(), singleLine = kind != RecordKind.SMS,
-                    keyboardOptions = KeyboardOptions(keyboardType = when (kind) { RecordKind.WIFI -> KeyboardType.Password; RecordKind.CONTACT -> KeyboardType.Phone; else -> KeyboardType.Text }),
-                    visualTransformation = if (kind == RecordKind.WIFI && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
-                    trailingIcon = if (kind == RecordKind.WIFI) ({ IconButton(onClick = { passwordVisible = !passwordVisible }) { Icon(if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, if (passwordVisible) "隐藏密码" else "显示密码") } }) else null,
-                    supportingText = if (kind == RecordKind.GEO) ({ Text("范围 -180 至 180，支持负数") }) else null)
-                if (kind == RecordKind.CONTACT) OutlinedTextField(value = tertiary, onValueChange = { tertiary = it; error = null }, label = { Text("邮箱（可选）") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
-                if (kind == RecordKind.WIFI) Text("有密码的网络按 WPA2-Personal / AES 编码。手机是否自动连接取决于系统支持。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (error != null) Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-            }
-        },
-        confirmButton = { TextButton(onClick = {
-            val draft = record.copy(value = value, secondary = secondary, tertiary = tertiary)
-            runCatching { NdefCodec.encode(listOf(draft)) }.onSuccess { onSave(draft) }.onFailure { error = it.message ?: "请检查填写内容" }
-        }) { Text("保存记录") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
-}
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsSheet(mode: String, onDismiss: () -> Unit, onTheme: (String) -> Unit, onNfcSettings: () -> Unit) {

@@ -35,7 +35,6 @@ class CardFlowTest {
     private lateinit var originalDraft: List<DraftRecord>
     private lateinit var originalEntry: DraftRecord
     private var originalImported: String? = null
-    private var originalMode = false
     private val old = snapshot("Old note", System.currentTimeMillis() - 60_000)
     private val card = SavedCard("card-flow-test", "床头卡", CardCategory.OTHER, old)
     private val engine = FakeNfc()
@@ -45,7 +44,6 @@ class CardFlowTest {
         originalHistory = store.loadHistory()
         originalDraft = store.draft()
         originalImported = store.imported()
-        originalMode = store.sequenceMode()
         originalEntry = store.quickEntry()
         store.saveCards(listOf(card))
         store.saveHistory(emptyList())
@@ -57,7 +55,7 @@ class CardFlowTest {
         instrumentation.runOnMainSync { viewModels.clear() }
         store.saveCards(originalCards)
         store.saveHistory(originalHistory)
-        store.saveDraft(originalDraft, originalImported, originalMode)
+        store.saveDraft(originalDraft, originalImported)
         store.saveQuickEntry(originalEntry)
     }
 
@@ -72,7 +70,7 @@ class CardFlowTest {
         app.waitUntil(5000) { vm.state.value.historyLoaded && vm.state.value.cards.isNotEmpty() }
     }
 
-    @Test fun successfulWriteUpdatesCardAndClickShowsAllLatestRecords() {
+    @Test fun successfulWriteUpdatesCardAndClickShowsOnlyTheLatestOperation() {
         launch()
         app.runOnIdle {
             vm.add(DraftRecord(kind = RecordKind.APPLICATION, value = "com.android.settings"))
@@ -86,14 +84,14 @@ class CardFlowTest {
         assertEquals(card.name, vm.state.value.cards.single().name)
         assertEquals(card.category, vm.state.value.cards.single().category)
         app.runOnIdle { vm.navigate(Destination.CARDS) }
-        app.onNodeWithText("打开应用 · 链接 / URI · 2 条").assertExists()
+        app.onNodeWithText("链接 / URI · 1 条").assertExists()
         capture("cards")
         app.onNodeWithText(card.name).performClick()
         app.onNodeWithText("卡包 · ${card.name}").assertExists()
         app.onNodeWithText("本机最新记录", substring = true).assertExists()
         capture("card-detail")
-        app.onNodeWithText("标签内容 · 2 条").assertExists()
-        app.onNodeWithText("com.android.settings").assertExists()
+        app.onNodeWithText("标签内容 · 1 条").assertExists()
+        app.onNodeWithText("com.android.settings").assertDoesNotExist()
         app.onNodeWithText("https://example.com/latest").performScrollTo().assertIsDisplayed()
         app.onNodeWithText("Old note").assertDoesNotExist()
         app.runOnIdle { assertEquals(ReadSource.CARD, vm.state.value.currentSource); vm.clearHistory() }
