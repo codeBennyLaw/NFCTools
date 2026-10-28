@@ -13,6 +13,24 @@ import org.junit.Test
 import java.io.File
 
 class FileTransferDeviceTest {
+    @Test fun multiOperationBackupRequiresSelectingOneItemBeforeWriting() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext.applicationContext as Application
+        lateinit var vm: NfcViewModel
+        instrumentation.runOnMainSync { vm = NfcViewModel(context); vm.clearDraft() }
+        val input = File(context.cacheDir, "legacy-many.ndef")
+        val message = android.nfc.NdefMessage(arrayOf(android.nfc.NdefRecord.createTextRecord("zh", "Old"), android.nfc.NdefRecord.createUri("https://example.com/selected")))
+        input.writeBytes(message.toByteArray())
+        try {
+            instrumentation.runOnMainSync { vm.importFile(Uri.fromFile(input), input.name, "application/octet-stream", true) }
+            waitFor { vm.state.value.currentSource == com.benny.nfctools.data.ReadSource.FILE }
+            assertNull(vm.messageBytes())
+            assertNull(vm.state.value.importedMessage)
+            instrumentation.runOnMainSync { vm.selectRecord(requireNotNull(vm.state.value.current), 1) }
+            assertEquals(1, NdefCodec.parse(requireNotNull(vm.messageBytes())).records.size)
+            assertEquals("https://example.com/selected", vm.state.value.activeEntry.value)
+        } finally { instrumentation.runOnMainSync { vm.clearDraft() }; input.delete() }
+    }
     @Test fun mimeFileAndNdefBackupUseRealContentResolver() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext.applicationContext as Application
@@ -58,7 +76,8 @@ class FileTransferDeviceTest {
             val pending = requireNotNull(vm.state.value.pending)
             vm.add(DraftRecord(value = "Changed after arming"))
             assertEquals(1, NdefCodec.parse(requireNotNull(pending.bytes)).records.size)
-            assertEquals(2, NdefCodec.parse(requireNotNull(vm.messageBytes())).records.size)
+            assertEquals(1, NdefCodec.parse(requireNotNull(vm.messageBytes())).records.size)
+            assertEquals("Changed after arming", NdefCodec.decode(NdefCodec.parse(requireNotNull(vm.messageBytes()))).single().content)
             vm.pause()
             assertNull(vm.state.value.pending)
             vm.resume()

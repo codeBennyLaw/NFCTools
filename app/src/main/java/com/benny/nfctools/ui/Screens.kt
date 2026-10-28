@@ -24,6 +24,7 @@ import com.benny.nfctools.NfcViewModel
 import com.benny.nfctools.data.*
 import com.benny.nfctools.nfc.NdefCodec
 import com.benny.nfctools.nfc.MemoryDumpCodec
+import com.benny.nfctools.system.SystemAction
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -33,14 +34,22 @@ private fun date(time: Long) = SimpleDateFormat("MM-dd HH:mm:ss", Locale.CHINA).
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ReadScreen(state: AppState, vm: NfcViewModel, openSettings: () -> Unit, onQuick: (RecordKind, String?) -> Unit, onExportPayload: (ByteArray, String) -> Unit, onExport: (TagSnapshot, Boolean) -> Unit) {
+fun ReadScreen(state: AppState, vm: NfcViewModel, openSettings: () -> Unit, onQuick: (RecordKind) -> Unit, onExportPayload: (ByteArray, String) -> Unit, onExport: (TagSnapshot, Boolean) -> Unit) {
     LazyColumn(contentPadding = PagePadding, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        item { ReaderStatus(state, openSettings) }
+        if (state.current == null || state.currentSource == ReadSource.NFC) item { ReaderStatus(state, openSettings) }
         if (state.current != null) {
             item {
-                SectionTitle(if (state.current.sample) "示例标签 · 界面演示" else "最近读取的标签")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionTitle(if (state.current.sample) "示例标签 · 界面演示" else when (state.currentSource) {
+                        ReadSource.CARD -> "卡包 · ${state.currentCardName.orEmpty()}"
+                        ReadSource.HISTORY -> "历史记录"
+                        ReadSource.FILE -> "导入的文件"
+                        ReadSource.NFC -> "最近读取的标签"
+                    })
+                    if (state.currentSource == ReadSource.CARD) Text("本机最新记录 · ${date(state.current.timestamp)}，贴卡可更新", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            item { TagDetails(state.current, vm, onExport, onExportPayload, !state.busy) }
+            item { TagDetails(state.current, vm, onExport, onExportPayload, !state.busy, state.currentSource == ReadSource.CARD) }
         } else {
             item {
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -57,7 +66,7 @@ fun ReadScreen(state: AppState, vm: NfcViewModel, openSettings: () -> Unit, onQu
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 listOf(RecordKind.TEXT, RecordKind.APPLICATION, RecordKind.FILE).forEach { kind ->
-                    Surface(onClick = { onQuick(kind, null) }, enabled = !state.busy, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface) {
+                    Surface(onClick = { onQuick(kind) }, enabled = !state.busy, modifier = Modifier.weight(1f), shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface) {
                         Column(Modifier.padding(horizontal = 8.dp, vertical = 20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Icon(kind.icon(), null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
                             Text(if (kind == RecordKind.APPLICATION) "打开 App" else "写入${kind.label}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
@@ -84,7 +93,7 @@ fun ReadScreen(state: AppState, vm: NfcViewModel, openSettings: () -> Unit, onQu
 }
 
 @Composable
-private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapshot, Boolean) -> Unit, onExportPayload: (ByteArray, String) -> Unit, enabled: Boolean) {
+private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapshot, Boolean) -> Unit, onExportPayload: (ByteArray, String) -> Unit, enabled: Boolean, contentFirst: Boolean) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     val message = remember(tag.messageBase64) { runCatching { NdefCodec.message(tag.messageBase64) }.getOrNull() }
@@ -101,13 +110,44 @@ private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapsho
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         tag.details["NDEF 读取"]?.let { InfoNote(it) }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilledTonalButton(onClick = { vm.saveCard(tag) }, enabled = enabled && !tag.sample, modifier = Modifier.weight(1f)) { Text("保存到卡包", fontSize = 13.sp) }
-            OutlinedButton(onClick = { vm.copyToNext(tag) }, enabled = enabled && tag.messageBase64 != null, modifier = Modifier.weight(1f)) { Text("复制到新卡", fontSize = 13.sp) }
-        }
-        if (tag.messageBase64 != null) OutlinedButton(onClick = { vm.editContents(tag) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Outlined.EditNote, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("编辑读到的内容")
-        }
+        if (!contentFirst) TagActions(tag, vm, enabled)
+        if (records.isNotEmpty()) {
+            SectionTitle("标签内容 · ${records.size} 条", if (raw) "收起 HEX" else "查看 HEX") { raw = !raw }
+            if (message!!.records.size > 1) Text("这张旧卡包含多条内容，选择其中一个操作重新录入。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            records.forEachIndexed { index, record ->
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background, RoundedCornerShape(16.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${index + 1}. ${record.title}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    SelectionContainer { Text(record.content.take(4096), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    if (record.content.length > 4096) Text("内容较长，导出 NDEF 可查看完整数据", style = MaterialTheme.typography.bodySmall)
+                    Text("${record.type} · ${record.size} B", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (raw) SelectionContainer { Text(record.hex.take(4096), fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
+                    val original = NdefCodec.contentRecords(message)[index]
+                    val systemAction = runCatching { SystemAction.fromRecord(original) }.getOrNull()
+                    if (systemAction != null) {
+                        Text(systemAction.function.help, style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = { vm.requestSystemAction(systemAction) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text("执行此操作") }
+                    }
+                    if (message.records.size > 1) OutlinedButton(onClick = { vm.selectRecord(tag, index) }, enabled = enabled && NdefCodec.isSingleOperation(android.nfc.NdefMessage(arrayOf(original))), modifier = Modifier.fillMaxWidth()) { Text("录入此操作") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { clipboard.setText(AnnotatedString(record.content)); vm.notify("内容已复制") }) { Text("复制内容") }
+                        if (record.title != "旧版等待步骤" && (original.toUri() != null || record.title == "打开应用")) TextButton(onClick = {
+                            runCatching {
+                                val intent = if (record.title == "打开应用") context.packageManager.getLaunchIntentForPackage(record.content) ?: error("手机未安装此应用")
+                                else android.content.Intent(android.content.Intent.ACTION_VIEW, original.toUri())
+                                context.startActivity(intent)
+                            }.onFailure { vm.notify(it.message ?: "没有可处理此内容的应用") }
+                        }, enabled = enabled) { Text(if (record.title == "打开应用") "打开 App" else "打开内容") }
+                    }
+                    if (original.tnf == android.nfc.NdefRecord.TNF_MIME_MEDIA && !SystemAction.isRecord(original)) TextButton(onClick = {
+                        val mime = original.toMimeType().orEmpty()
+                        val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "bin"
+                        onExportPayload(original.payload, "nfc-record-${index + 1}.$extension")
+                    }, enabled = enabled) { Icon(Icons.Outlined.FileDownload, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("保存此文件") }
+                }
+            }
+        } else InfoNote(if (tag.formatable) "尚未发现 NDEF 内容，可在工具页将此标签格式化。" else "此卡没有可读取的 NDEF 内容。已显示可获取的公开信息；加密区需专用协议和授权。")
+        if (contentFirst) TagActions(tag, vm, enabled)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -124,34 +164,6 @@ private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapsho
                 LinearProgressIndicator(progress = { if (tag.capacity > 0) (size.toFloat() / tag.capacity).coerceIn(0f, 1f) else 0f }, modifier = Modifier.fillMaxWidth().height(5.dp), color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.primaryContainer)
             }
         }
-        if (records.isNotEmpty()) {
-            SectionTitle("NDEF 内容 · ${records.size} 条", if (raw) "收起 HEX" else "查看 HEX") { raw = !raw }
-            records.forEachIndexed { index, record ->
-                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background, RoundedCornerShape(16.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${index + 1}. ${record.title}", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    SelectionContainer { Text(record.content.take(4096), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    if (record.content.length > 4096) Text("内容较长，导出 NDEF 可查看完整数据", style = MaterialTheme.typography.bodySmall)
-                    Text("${record.type} · ${record.size} B", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (raw) SelectionContainer { Text(record.hex.take(4096), fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
-                    val original = message!!.records[index]
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { clipboard.setText(AnnotatedString(record.content)); vm.notify("内容已复制") }) { Text("复制内容") }
-                        if (original.toUri() != null || record.title == "打开应用") TextButton(onClick = {
-                            runCatching {
-                                val intent = if (record.title == "打开应用") context.packageManager.getLaunchIntentForPackage(record.content) ?: error("手机未安装此应用")
-                                else android.content.Intent(android.content.Intent.ACTION_VIEW, original.toUri())
-                                context.startActivity(intent)
-                            }.onFailure { vm.notify(it.message ?: "没有可处理此内容的应用") }
-                        }) { Text(if (record.title == "打开应用") "打开 App" else "打开内容") }
-                    }
-                    if (original.tnf == android.nfc.NdefRecord.TNF_MIME_MEDIA) TextButton(onClick = {
-                        val mime = original.toMimeType().orEmpty()
-                        val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "bin"
-                        onExportPayload(original.payload, "nfc-record-${index + 1}.$extension")
-                    }, enabled = enabled) { Icon(Icons.Outlined.FileDownload, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("保存此文件") }
-                }
-            }
-        } else InfoNote(if (tag.formatable) "尚未发现 NDEF 内容，可在工具页将此标签格式化。" else "此卡没有可读取的 NDEF 内容。已显示可获取的公开信息；加密区需专用协议和授权。")
         var expanded by rememberSaveable(tag.id) { mutableStateOf(false) }
         TextButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) { Text(if (expanded) "收起技术信息" else "展开技术信息"); Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null) }
         if (expanded) tag.details.forEach { (label, value) -> DetailLine(label, value) }
@@ -170,6 +182,19 @@ private fun TagDetails(tag: TagSnapshot, vm: NfcViewModel, onExport: (TagSnapsho
             OutlinedButton(onClick = { onExport(tag, false) }, enabled = enabled, modifier = Modifier.weight(1f)) { Text("导出报告", fontSize = 13.sp) }
             OutlinedButton(onClick = { onExport(tag, true) }, enabled = enabled && tag.messageBase64 != null, modifier = Modifier.weight(1f)) { Text("备份 NDEF", fontSize = 13.sp) }
         }
+    }
+}
+
+@Composable
+private fun TagActions(tag: TagSnapshot, vm: NfcViewModel, enabled: Boolean) {
+    val message = remember(tag.messageBase64) { runCatching { NdefCodec.message(tag.messageBase64) }.getOrNull() }
+    val contents = NdefCodec.contentRecords(message)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilledTonalButton(onClick = { vm.saveCard(tag) }, enabled = enabled && !tag.sample, modifier = Modifier.weight(1f)) { Text("保存到卡包", fontSize = 13.sp) }
+        OutlinedButton(onClick = { vm.copyToNext(tag) }, enabled = enabled && NdefCodec.isSingleOperation(message), modifier = Modifier.weight(1f)) { Text("复制到新卡", fontSize = 13.sp) }
+    }
+    if (contents.size == 1 && NdefCodec.isSingleOperation(android.nfc.NdefMessage(contents.toTypedArray()))) OutlinedButton(onClick = { vm.editContents(tag) }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Outlined.EditNote, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("编辑读到的内容")
     }
 }
 

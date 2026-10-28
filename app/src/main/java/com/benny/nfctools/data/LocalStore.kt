@@ -24,18 +24,20 @@ class LocalStore(context: Context) {
     }
     fun draft(): List<DraftRecord> = runCatching {
         val a = JSONArray(prefs.getString("draft", "[]"))
-        (0 until a.length()).map {
+        (0 until a.length()).mapNotNull {
             val o = a.getJSONObject(it)
-            DraftRecord(o.getString("id"), RecordKind.valueOf(o.getString("kind")), o.getString("value"),
+            val kind = runCatching { RecordKind.valueOf(o.getString("kind")) }.getOrNull() ?: return@mapNotNull null
+            DraftRecord(o.getString("id"), kind, o.getString("value"),
                 o.optString("secondary"), o.optString("tertiary"), o.optString("mime", "application/octet-stream"), o.optString("base64"))
-        }
+        }.takeLast(1)
     }.getOrDefault(emptyList())
     fun saveDraft(records: List<DraftRecord>, imported: String?) {
+        require(records.size <= 1) { "一张卡只能录入一个操作" }
         val a = JSONArray().apply { records.forEach { d ->
             put(JSONObject().put("id", d.id).put("kind", d.kind.name).put("value", d.value)
                 .put("secondary", d.secondary).put("tertiary", d.tertiary).put("mime", d.mime).put("base64", d.base64))
         } }
-        prefs.edit { putString("draft", a.toString()); putString("imported", imported) }
+        prefs.edit { putString("draft", a.toString()); putString("imported", imported); remove("sequence_mode") }
     }
     fun imported(): String? = prefs.getString("imported", null)
     fun theme(): String = prefs.getString("theme", "system") ?: "system"

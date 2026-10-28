@@ -17,7 +17,7 @@ import java.io.ByteArrayInputStream
 class NdefCodecTest {
     @Test fun chineseTextAndUriSurviveBinaryRoundTrip() {
         val drafts = listOf(DraftRecord(value = "你好，世界\n第二行 NFC"), DraftRecord(kind = RecordKind.URI, value = "https://example.com/a?b=1"))
-        val original = NdefCodec.encode(drafts)
+        val original = NdefMessage(drafts.map(NdefCodec::encodeRecord).toTypedArray())
         val restored = NdefCodec.parse(NdefCodec.fromBase64(NdefCodec.base64(original.toByteArray())))
         val records = NdefCodec.decode(restored)
         assertEquals(drafts[0].value, records[0].content)

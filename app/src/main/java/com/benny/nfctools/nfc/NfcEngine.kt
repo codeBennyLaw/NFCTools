@@ -84,7 +84,7 @@ class NfcEngine : NfcOperations {
                 val snapshot = read(tag, "读取内存")
                 return snapshot.copy(memory = memory(tag, op))
             }
-            OperationKind.WRITE -> write(tag, NdefCodec.parse(requireNotNull(op.bytes)))
+            OperationKind.WRITE -> write(tag, NdefCodec.requireSingleOperation(NdefCodec.parse(requireNotNull(op.bytes))))
             OperationKind.ERASE -> write(tag, emptyMessage())
             OperationKind.FORMAT -> {
                 require(Ndef.get(tag) == null) { "此标签已经是 NDEF 格式，可直接写入或擦除" }

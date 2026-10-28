@@ -13,6 +13,7 @@ enum class RecordKind(val label: String, val description: String) {
     GEO("位置", "经纬度坐标"),
     FILE("文件", "将小文件作为 MIME 数据写入"),
     APPLICATION("打开应用", "选择手机里的 App，轻触打开"),
+    SYSTEM("系统功能", "音量、亮度、手电筒、勿扰与系统设置"),
     CUSTOM_URI("自定义链接", "应用深层链接或其他 URI"),
     HEX("HEX 数据", "自定义 MIME 类型与十六进制内容"),
 }
@@ -60,6 +61,7 @@ data class TagSnapshot(
 }
 
 enum class DeviceStatus { READY, DISABLED, UNSUPPORTED }
+enum class ReadSource { NFC, CARD, HISTORY, FILE }
 enum class Destination(val label: String) { READ("读取"), WRITE("写入"), CARDS("卡包"), TOOLS("工具"), HISTORY("记录") }
 enum class OperationKind(val label: String) { WRITE("写入内容"), ERASE("擦除 NDEF"), FORMAT("格式化 NDEF"), LOCK("永久只读"), READ_MEMORY("读取内存") }
 data class PendingOperation(val kind: OperationKind, val bytes: ByteArray? = null, val keyHex: String = "FFFFFFFFFFFF", val keyB: Boolean = false, val pageCount: Int = 16)
@@ -71,6 +73,8 @@ data class AppState(
     val device: DeviceStatus = DeviceStatus.UNSUPPORTED,
     val destination: Destination = Destination.READ,
     val current: TagSnapshot? = null,
+    val currentSource: ReadSource = ReadSource.NFC,
+    val currentCardName: String? = null,
     val draft: List<DraftRecord> = emptyList(),
     val importedMessage: String? = null,
     val history: List<TagSnapshot> = emptyList(),

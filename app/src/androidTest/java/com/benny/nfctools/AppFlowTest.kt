@@ -16,25 +16,20 @@ class AppFlowTest {
         }
     }
 
-    @Test fun textDraftCanBeAddedEditedAndRemoved() {
+    @Test fun singleOperationCanBeEditedAndClearedWithoutAList() {
         app.onNodeWithText("写入", useUnmergedTree = true).performClick()
         app.onNodeWithText("文本内容").performTextInput("NFC flow test")
-        app.onNodeWithText("添加到列表，继续录入").performScrollTo().performClick()
-        scrollTo("NFC flow test")
-        app.onNodeWithText("NFC flow test").assertIsDisplayed()
-        app.onNodeWithContentDescription("编辑文本").performClick()
-        app.onNode(hasText("文本内容") and hasAnyAncestor(isDialog())).performTextReplacement("Updated NFC text")
-        app.onNodeWithText("保存记录").performClick()
-        scrollTo("Updated NFC text")
+        app.onNode(hasSetTextAction() and hasText("NFC flow test")).performTextReplacement("Updated NFC text")
         app.onNodeWithText("Updated NFC text").assertIsDisplayed()
-        app.onNodeWithContentDescription("移除文本").performClick()
+        app.onNodeWithText("清空当前操作").performScrollTo().performClick()
         app.onNodeWithText("Updated NFC text").assertDoesNotExist()
     }
     @Test fun invalidUrlKeepsEditorOpenAndShowsError() {
         app.onNodeWithText("写入", useUnmergedTree = true).performClick()
         app.onNodeWithText("网址", useUnmergedTree = true).performClick()
         app.onNode(hasSetTextAction() and hasText("网址")).performTextInput("not-a-url")
-        app.onNodeWithText("添加到列表，继续录入").performScrollTo().performClick()
+        app.runOnIdle { ViewModelProvider(app.activity)[NfcViewModel::class.java].setDevice(com.benny.nfctools.data.DeviceStatus.READY) }
+        app.onNodeWithText("贴卡写入").performClick()
         app.onNodeWithText("请输入有效网址，例如 example.com 或 https://example.com").assertExists()
     }
     @Test fun destructiveToolRequiresConfirmationAndCanBeCancelled() {

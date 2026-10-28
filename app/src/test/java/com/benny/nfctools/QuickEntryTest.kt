@@ -42,8 +42,10 @@ class QuickEntryTest {
         val originals = listOf(DraftRecord(value = "你好"), DraftRecord(kind = RecordKind.URI, value = "https://example.com"),
             DraftRecord(kind = RecordKind.WIFI, value = "Home", secondary = "password123"),
             DraftRecord(kind = RecordKind.FILE, value = "raw.bin", base64 = NdefCodec.base64(byteArrayOf(0, 127, -1))))
-        val message = NdefCodec.encode(originals)
-        assertArrayEquals(message.toByteArray(), NdefCodec.encode(NdefCodec.editable(message)).toByteArray())
+        val message = NdefMessage(originals.map(NdefCodec::encodeRecord).toTypedArray())
+        val edited = NdefCodec.editable(message)
+        assertArrayEquals(message.toByteArray(), NdefMessage(edited.map(NdefCodec::encodeRecord).toTypedArray()).toByteArray())
+        assertThrows(IllegalArgumentException::class.java) { NdefCodec.encode(edited) }
     }
     @Test fun uriQueryFieldsAreDecodedForEditing() {
         val entry = DraftRecord(kind = RecordKind.SMS, value = "+8613800138000", secondary = "你好 & NFC")

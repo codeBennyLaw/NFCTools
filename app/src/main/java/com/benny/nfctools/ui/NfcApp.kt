@@ -43,8 +43,6 @@ fun NfcApp(vm: NfcViewModel, openSettings: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var settings by rememberSaveable { mutableStateOf(false) }
-    var editorKind by rememberSaveable { mutableStateOf<String?>(null) }
-    var editorId by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmation by rememberSaveable { mutableStateOf<String?>(null) }
     var fileIsNdef by rememberSaveable { mutableStateOf(false) }
     var fileIsDump by rememberSaveable { mutableStateOf(false) }
@@ -86,11 +84,10 @@ fun NfcApp(vm: NfcViewModel, openSettings: () -> Unit) {
     fun chooseContact() { runCatching { contactPicker.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)) }.onFailure { vm.notify("此设备没有联系人选择器，可手动填写") } }
     fun chooseFile(ndef: Boolean, dump: Boolean = false) { fileIsNdef = ndef; fileIsDump = dump; importer.launch(arrayOf("*/*")) }
     fun export(bytes: ByteArray, name: String) { exportBytes = bytes; exporter.launch(name) }
-    fun edit(kind: RecordKind, id: String? = null) {
-        if (id == null) vm.selectKind(kind) else vm.navigate(Destination.WRITE)
+    fun edit(kind: RecordKind) {
+        vm.selectKind(kind)
         if (kind == RecordKind.FILE) chooseFile(false)
-        else if (kind == RecordKind.APPLICATION && id == null) applicationPicker = true
-        else if (id != null) { editorKind = kind.name; editorId = id }
+        else if (kind == RecordKind.APPLICATION) applicationPicker = true
     }
     fun openWallet() {
         val intent = listOf("com.hihonor.wallet", "com.huawei.wallet").firstNotNullOfOrNull { context.packageManager.getLaunchIntentForPackage(it) }
@@ -107,9 +104,10 @@ fun NfcApp(vm: NfcViewModel, openSettings: () -> Unit) {
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     LaunchedEffect(vm) { vm.messages.collect { snackbar.currentSnackbarData?.dismiss(); snackbar.showSnackbar(it, withDismissAction = true) } }
     BackHandler(enabled = state.pending != null && !state.busy) { vm.cancel() }
-    BackHandler(enabled = state.destination != Destination.READ && state.pending == null && !state.busy && !settings && editorKind == null && confirmation == null) { vm.navigate(Destination.READ) }
+    BackHandler(enabled = state.destination != Destination.READ && state.pending == null && !state.busy && !settings && confirmation == null) { vm.navigate(Destination.READ) }
 
     NfcTheme(state.darkMode) {
+        SystemActionHost(vm)
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = { SnackbarHost(snackbar) },
@@ -160,7 +158,7 @@ fun NfcApp(vm: NfcViewModel, openSettings: () -> Unit) {
                                 if (raw) snapshot.messageBase64?.let { export(NdefCodec.fromBase64(it), "nfc-${snapshot.timestamp}.ndef") }
                                 else export(LocalStore.json(snapshot).toString(2).toByteArray(), "nfc-${snapshot.timestamp}.json")
                             })
-                        Destination.WRITE -> QuickWriteScreen(state, vm, onFile = { chooseFile(false) }, onContact = ::chooseContact, onApplication = { applicationPicker = true }, onEdit = { edit(it.kind, it.id) },
+                        Destination.WRITE -> QuickWriteScreen(state, vm, onFile = { chooseFile(false) }, onContact = ::chooseContact, onApplication = { applicationPicker = true },
                             onImport = { chooseFile(true) }, onExport = { bytes -> export(bytes, "nfc-draft.ndef") })
                         Destination.CARDS -> CardsScreen(state, vm, onCompare = { comparing = true })
                         Destination.TOOLS -> AdvancedToolsScreen(state, onOperation = { if (it == OperationKind.READ_MEMORY) readingMemory = true else confirmation = it.name }, onImport = { chooseFile(true) }, onImportDump = { chooseFile(false, true) }, onCompare = { comparing = true }, onSample = vm::showSample, onNfcSettings = openSettings, onWallet = ::openWallet)
@@ -170,11 +168,6 @@ fun NfcApp(vm: NfcViewModel, openSettings: () -> Unit) {
             }
         }
 
-        if (editorKind != null) {
-            val kind = RecordKind.valueOf(editorKind!!)
-            val record = state.draft.firstOrNull { it.id == editorId } ?: remember(editorKind, editorId) { DraftRecord(id = editorId!!, kind = kind) }
-            RecordEditor(record, onDismiss = { editorKind = null }, onSave = { if (vm.add(it)) editorKind = null })
-        }
         if (settings) SettingsSheet(state.darkMode, onDismiss = { settings = false }, onTheme = vm::theme, onNfcSettings = openSettings)
         if (applicationPicker) ApplicationPicker(onDismiss = { applicationPicker = false }, onSelect = { pkg, label -> vm.quickEntry(DraftRecord(kind = RecordKind.APPLICATION, value = pkg, secondary = label)); applicationPicker = false })
         if (comparing) ComparisonSheet(state, onDismiss = { comparing = false })

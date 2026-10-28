@@ -8,19 +8,41 @@ import androidx.core.net.toUri
 import com.benny.nfctools.data.DecodedRecord
 import com.benny.nfctools.data.DraftRecord
 import com.benny.nfctools.data.RecordKind
+import com.benny.nfctools.system.SystemAction
 import java.io.ByteArrayOutputStream
 
 object NdefCodec {
     const val MAX_FILE_BYTES = 48 * 1024
     fun encode(records: List<DraftRecord>): NdefMessage {
         require(records.isNotEmpty()) { "请先添加至少一条记录" }
-        require(records.size <= 32) { "最多添加 32 条记录" }
+        require(records.size == 1) { "一张卡只能录入一个操作" }
         return NdefMessage(records.map(::encodeRecord).toTypedArray()).also {
             require(it.toByteArray().size <= MAX_FILE_BYTES) { "总数据不能超过 48 KB，请缩小文件或减少记录" }
         }
     }
 
+    fun requireSingleOperation(message: NdefMessage): NdefMessage {
+        require(message.records.size == 1 && message.records.single().tnf != NdefRecord.TNF_EMPTY) { "一张卡只能录入一个操作，请选择其中一项" }
+        val record = message.records.single()
+        require(record.tnf != NdefRecord.TNF_EXTERNAL_TYPE || record.type.toString(Charsets.US_ASCII) !in listOf("com.benny.nfctools:sequence", "com.benny.nfctools:delay")) { "旧版任务步骤仅供查看，请选择一个普通操作" }
+        if (SystemAction.isRecord(record)) SystemAction.fromRecord(record)
+        return message
+    }
+
+    fun isSingleOperation(message: NdefMessage?): Boolean = message != null && runCatching { requireSingleOperation(message) }.isSuccess
+
+    // Old task cards remain readable. Routing metadata is never written again.
+    fun contentRecords(message: NdefMessage?): List<NdefRecord> {
+        val records = message?.records?.toList() ?: return emptyList()
+        val legacy = records.size >= 3 && records[0].tnf == NdefRecord.TNF_EXTERNAL_TYPE &&
+            records[0].type.toString(Charsets.US_ASCII) == "com.benny.nfctools:sequence" && records[0].payload.contentEquals(byteArrayOf(1)) &&
+            records[1].tnf == NdefRecord.TNF_EXTERNAL_TYPE && records[1].type.toString(Charsets.US_ASCII) == "android.com:pkg" &&
+            records[1].payload.toString(Charsets.UTF_8) == "com.benny.nfctools"
+        return if (legacy) records.drop(2) else records
+    }
+
     fun encodeRecord(d: DraftRecord): NdefRecord = when (d.kind) {
+        RecordKind.SYSTEM -> SystemAction.fromDraft(d).record()
         RecordKind.TEXT -> {
             require(d.value.isNotBlank()) { "请输入文本内容" }
             NdefRecord.createTextRecord("zh", d.value)
@@ -103,12 +125,21 @@ object NdefCodec {
         return NdefRecord.createMime("application/vnd.wfa.wsc", payload)
     }
 
-    fun decode(message: NdefMessage?): List<DecodedRecord> = message?.records?.map { r ->
+    fun summary(encoded: String?): String = runCatching {
+        val message = message(encoded) ?: return "暂无 NDEF 内容"
+        val records = contentRecords(message)
+        if (records.all { it.tnf == NdefRecord.TNF_EMPTY }) return "内容已清空"
+        val types = decode(message).map { it.title }.distinct().take(3).joinToString(" · ")
+        "$types · ${records.size} 条"
+    }.getOrDefault("NDEF 内容无法解析")
+
+    fun decode(message: NdefMessage?): List<DecodedRecord> = contentRecords(message).map { r ->
         var title = "原始数据"
         var content = r.payload.hex()
         val type = r.type.toString(Charsets.US_ASCII)
         try {
             when {
+                SystemAction.isRecord(r) -> { title = "系统功能"; content = requireNotNull(SystemAction.fromRecord(r)).description }
                 r.tnf == NdefRecord.TNF_EMPTY -> { title = "空记录"; content = "此标签的 NDEF 内容已清空" }
                 r.tnf == NdefRecord.TNF_WELL_KNOWN && r.type.contentEquals(NdefRecord.RTD_TEXT) -> {
                     title = "文本"
@@ -118,6 +149,7 @@ object NdefCodec {
                     content = r.payload.copyOfRange(start, r.payload.size).toString(if (status and 0x80 != 0) Charsets.UTF_16 else Charsets.UTF_8)
                 }
                 r.tnf == NdefRecord.TNF_EXTERNAL_TYPE && type == "android.com:pkg" -> { title = "打开应用"; content = r.payload.toString(Charsets.UTF_8) }
+                r.tnf == NdefRecord.TNF_EXTERNAL_TYPE && type == "com.benny.nfctools:delay" -> { title = "旧版等待步骤"; content = "${r.payload.toString(Charsets.US_ASCII)} 秒（仅供查看）" }
                 r.toUri() != null -> { title = "链接 / URI"; content = r.toUri().toString() }
                 r.tnf == NdefRecord.TNF_MIME_MEDIA -> {
                     title = when (type) { "text/vcard", "text/x-vcard" -> "联系人"; "application/vnd.wfa.wsc" -> "Wi-Fi 配置"; else -> "文件 / MIME" }
@@ -131,7 +163,7 @@ object NdefCodec {
         } catch (_: RuntimeException) { title = "无法解析的记录" }
         val raw = NdefMessage(arrayOf(r)).toByteArray()
         DecodedRecord(title, content, "TNF ${r.tnf} · ${type.ifEmpty { "无类型" }}", raw.size, raw.hex())
-    } ?: emptyList()
+    }
 
     fun parse(bytes: ByteArray): NdefMessage {
         require(bytes.isNotEmpty() && bytes.size <= MAX_FILE_BYTES) { "NDEF 数据大小需为 1 字节至 48 KB" }
@@ -158,10 +190,11 @@ object NdefCodec {
         return "网络名称：$ssid\n${if (protected) "包含网络凭据，可通过 HEX 或导出查看" else "开放网络"}"
     }
     fun message(base64: String?): NdefMessage? = base64?.let { parse(fromBase64(it)) }
-    fun editable(message: NdefMessage): List<DraftRecord> = message.records.filter { it.tnf != NdefRecord.TNF_EMPTY }.map { r ->
+    fun editable(message: NdefMessage): List<DraftRecord> = contentRecords(message).filter { it.tnf != NdefRecord.TNF_EMPTY }.map { r ->
         require(r.id.isEmpty()) { "此记录带有自定义 ID，请使用原样复制以保留数据" }
         val type = r.type.toString(Charsets.US_ASCII)
         when {
+            SystemAction.isRecord(r) -> requireNotNull(SystemAction.fromRecord(r)).draft()
             r.tnf == NdefRecord.TNF_WELL_KNOWN && r.type.contentEquals(NdefRecord.RTD_TEXT) -> DraftRecord(value = decode(NdefMessage(arrayOf(r))).single().content)
             r.tnf == NdefRecord.TNF_EXTERNAL_TYPE && type == "android.com:pkg" -> DraftRecord(kind = RecordKind.APPLICATION, value = r.payload.toString(Charsets.UTF_8))
             type == "application/vnd.wfa.wsc" -> {
